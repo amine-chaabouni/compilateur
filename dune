@@ -1,0 +1,5 @@
+(executable
+ (name minic)
+ (promote (until-clean))
+ (flags ())
+ (modules_without_implementation ptree ttree))
