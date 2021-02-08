@@ -1,6 +1,7 @@
 
 open Rtltree
 
+let zero_i32 = Int32.of_int 0;
 
 exception Error of string
 
@@ -16,9 +17,25 @@ let generate i =
   l
 
 
+
+
 let rec expr e destr destl = match e with
   | Ttree.Econst cst -> Rtltree.Econst(cst, destr, destl)
-  | _ -> raise_error "Not yet implemented";;
+  | Ttree.Eunop (unop, e) -> treat_unop e destr destl unop
+  | _ -> raise_error "Not yet implemented";
+
+
+and treat_unop e destr destl = function
+  | Ptree.Uminus -> begin
+    let reg_e = Register.fresh() in
+    let instruction_binop = Embinop(Ops.Msub, reg_e, destr, destl) in
+    let label_binop = generate instruction_binop in
+    let instuction_e = expr e.expr_node reg_e label_binop in
+    let label_put_e = generate instuction_e in
+    let instruction_put_zero = expr (Ttree.Econst zero_i32) destr label_put_e in
+    instruction_put_zero
+  end;
+  | Ptree.Unot -> raise_error "Unot not yet implemented";;
 
 
 
