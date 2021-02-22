@@ -136,7 +136,7 @@ and treat_binop local_reg e1 e2 destr destl binop =
     boolean_op Ops.Msetg destr destl label_next local_reg;  Ops.Msub;
   | Ptree.Bge ->
     boolean_op Ops.Msetge destr destl label_next local_reg; Ops.Msub;
-  | Ptree.Badd -> Ops.Madd
+  | Ptree.Badd -> Ops.Madd (*TODO : Implement a better add to take into account constants and use addi*)
   | Ptree.Bsub -> Ops.Msub
   | Ptree.Bmul -> Ops.Mmul
   | Ptree.Bdiv -> Ops.Mdiv
@@ -214,7 +214,6 @@ let rec stmt s destl retr exitl local_reg = match s with
       label_branching
     end; 
   | Ttree.Swhile (e, s) -> begin
-    (*TODO : find a way to use only labels*)
     let go_to_label = Label.fresh() in
     let loop_label = stmt s go_to_label retr exitl local_reg in
     let label_expression = condition e.expr_node loop_label destl local_reg in
@@ -239,7 +238,6 @@ let deffun (fun_definition:Ttree.decl_fun) =
   and local_reg = ref Register.S.empty in
   let entryl = stmt (Ttree.Sblock fun_definition.fun_body) exitl retr exitl local_reg
   in
-  (*if Register.S.is_empty !local_reg then print_string "empty :o \n" else print_string "ok\n";*)
   {
     fun_name = name;
     fun_formals = [];
