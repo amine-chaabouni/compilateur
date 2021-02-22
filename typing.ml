@@ -260,21 +260,32 @@ let rec convert_expr_node variable_list = function
     end)
   
 and treat_binop variable_list binop e1 e2 = match binop with
+  (* convert expressions and see if they are compatible*)
   | Beq | Bneq | Blt | Ble | Bgt | Bge -> begin
       let e1_typ, e1_node = convert_expr_node variable_list e1.expr_node and e2_typ, e2_node = convert_expr_node variable_list e2.expr_node in
       if (compare_typ e1_typ e2_typ) then
         Tint, Ttree.Ebinop (binop, {expr_node= e1_node; expr_typ= e1_typ}, {expr_node= e2_node; expr_typ= e2_typ})
       else raise_unconsistant e1.expr_loc e1_typ e2_typ
     end
-  
-  | Badd | Bsub | Bmul | Bdiv -> begin
-    let e1_typ, e1_node = convert_expr_node variable_list e1.expr_node and e2_typ, e2_node = convert_expr_node variable_list e2.expr_node in
-    if (compare_typ e1_typ Tint && compare_typ e2_typ Tint) then
-      Tint, Ttree.Ebinop (binop, {expr_node= e1_node; expr_typ= e1_typ}, {expr_node= e2_node; expr_typ= e2_typ})
-    else raise_unconsistant e1.expr_loc e1_typ e2_typ
-  end
+  | Bmul | Bdiv -> begin 
+      (* Bonus : See if they are compatible with int *)
+      let e1_typ, e1_node = convert_expr_node variable_list e1.expr_node and e2_typ, e2_node = convert_expr_node variable_list e2.expr_node in
+      if (compare_typ e1_typ Tint && compare_typ e2_typ Tint) then
+          (* Treat the case 0*x, 0/x and x/0 by indicating that the return type is typenull *)  
+          let return_type = (if(e1_typ = Ttypenull || e2_typ = Ttypenull) then Ttypenull else Tint) in
+          return_type, Ttree.Ebinop (binop, {expr_node= e1_node; expr_typ= e1_typ}, {expr_node= e2_node; expr_typ= e2_typ})
+      else raise_unconsistant e1.expr_loc e1_typ e2_typ
+    end
+  | Badd | Bsub -> begin (* TODO : find a way to say if add or sub get us to 0 *)
+      (* Bonus : See if they are compatible with int *)
+      let e1_typ, e1_node = convert_expr_node variable_list e1.expr_node and e2_typ, e2_node = convert_expr_node variable_list e2.expr_node in
+      if (compare_typ e1_typ Tint && compare_typ e2_typ Tint) then
+        Tint, Ttree.Ebinop (binop, {expr_node= e1_node; expr_typ= e1_typ}, {expr_node= e2_node; expr_typ= e2_typ})
+      else raise_unconsistant e1.expr_loc e1_typ e2_typ
+    end
 
   | Band | Bor -> begin
+      (* Bonus : compatibility unecessary *)
       let e1_typ, e1_node = convert_expr_node variable_list e1.expr_node and e2_typ, e2_node = convert_expr_node variable_list e2.expr_node in
       Tint, Ttree.Ebinop (binop, {expr_node= e1_node; expr_typ= e1_typ}, {expr_node= e2_node; expr_typ= e2_typ})
     end
