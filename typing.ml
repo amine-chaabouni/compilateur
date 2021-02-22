@@ -151,6 +151,10 @@ let rec convert_expr_node variable_list = function
       end
     | Ptree.Larrow (lar,field) -> begin
         let lar_typ, lar_node = convert_expr_node variable_list lar.expr_node in
+        (* Take care of the case 0->field / typenull->field *)
+        if(lar_typ = Ttree.Ttypenull) then 
+        lar_typ, Ttree.Eaccess_field({expr_node=lar_node; expr_typ=lar_typ}, {field_name = field.id; field_typ = lar_typ; field_pos = 0})
+      else
         let variable_name = get_var_name lar.expr_node in
         (*raise (Error ("var name " ^ variable_name ^ " field " ^ field.id ^ " : type of node lar is " ^ (string_of_expr_node lar_node)));*)
         
@@ -186,6 +190,12 @@ let rec convert_expr_node variable_list = function
 
       let e_typ, e_node = convert_expr_node variable_list e.expr_node in
       if(compare_typ saved_typ e_typ) then( (*Make sure the types are consistant*)
+        (*print_string ("Typing : " ^ lid.id ^ " was : " ^ (string_of_type saved_typ) ^ " \n");*)
+        if(e_typ = Ttypenull) then
+          begin
+            Hashtbl.replace variable_list lid.id (e_typ, lid.id);
+            (*print_string ("Typing : " ^ lid.id ^ " is : " ^ (string_of_type e_typ) ^ " \n");*)
+          end;
         saved_typ, Ttree.Eassign_local (lid.id,{expr_node = e_node; expr_typ = e_typ})
       )
       else raise_unconsistant lid.id_loc saved_typ e_typ;
@@ -336,6 +346,7 @@ and convert_block variable_list return_typ (decl_list,stmt_list) =
   let local_declarations = [] in
   let local_declarations, converted_var = convert_decl_var_list variable_list local_declarations decl_list
   and converted_stmt = convert_stmt_list variable_list return_typ stmt_list in
+  (*Hashtbl.iter (fun key (t,n) -> print_string ("variable " ^ key ^" of type " ^ (string_of_type t) ^ "\n")) variable_list;*)
   remove_variables variable_list local_declarations;
   (converted_var,converted_stmt);;
 
