@@ -90,24 +90,25 @@ let convert_type =  function
   with Not_found -> raise_undeclared_structure ident in Tstructp structtyp;;
 ;;
 
+(* Creates structures and saves them in a hashtable *)
 let struct_aux ((identifier, list_of_members):Ptree.decl_struct) =
   let str_identifier = "struct " ^ identifier.id ^ " *" in
   if(Hashtbl.mem structures str_identifier) then
     raise (Error (str_identifier ^ " previously declared. Can't declare it twice."))
   else
-    let new_struc = {str_name = identifier.id; str_fields = Hashtbl.create(List.length list_of_members)} in 
+    let new_struc = {str_name = identifier.id; str_fields = Hashtbl.create(List.length list_of_members); str_size = List.length list_of_members} in 
     Hashtbl.add structures str_identifier new_struc;
-    let rec fill (declaration_var:Ptree.decl_var list) = match declaration_var with
+    let rec fill (declaration_var:Ptree.decl_var list) position = match declaration_var with
     | hd::tl -> 
       let hd_typ, hd_ident = hd in
       if(Hashtbl.mem new_struc.str_fields hd_ident.id) then
         raise (Error (str_identifier ^ "already possesses " ^ hd_ident.id ^ ". Can't declare field twice in a single structre."))
       else
       (
-        let new_field = {field_name = hd_ident.id; field_typ = convert_type hd_typ} in
-        Hashtbl.add new_struc.str_fields hd_ident.id new_field; fill tl;)
+        let new_field = {field_name = hd_ident.id; field_typ = convert_type hd_typ; field_pos = position} in
+        Hashtbl.add new_struc.str_fields hd_ident.id new_field; fill tl (position+1);)
     | [] -> (); in
-    fill list_of_members;
+    fill list_of_members 0;
   ;;
 ;;
 
