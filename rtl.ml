@@ -5,6 +5,8 @@ open Rtltree
 let zero_i32 = Int32.of_int 0;;
 let one_i32 = Int32.of_int 1;;
 
+let wordsize = 8;;
+
 exception Error of string
 
 let raise_error  error =
@@ -58,6 +60,8 @@ let rec expr e destr destl = match e with
     | _ -> treat_binop e1 e2 destr destl binop
   end;
   | Ttree.Eassign_local (id, e) -> begin
+    (*print_string ("assign local : " ^id ^"\n");
+    print_string ("type of assign : " ^ (Typing.string_of_type e.expr_typ) ^"\n");*)
     (* Find the register associated to the variable.
     If the register doesn't exist already, create a fresh one
     Add the association to the table and add the register to the locals*)
@@ -92,7 +96,16 @@ let rec expr e destr destl = match e with
     graph := Label.M.add call_label call_instr !graph;
     label_first_param
   end;
-  | Ttree.Eaccess_field (a,b)-> raise_error "access field not yet implemented";
+  | Ttree.Eaccess_field (e,f)-> begin
+    if(e.expr_typ = Ttree.Ttypenull) then raise_error "Null type can't be field accessed";
+    (*print_string ("RTL Eaccess field : expression : " ^ Typing.string_of_type e.expr_typ ^ "\n");
+    print_string ("RTL Eaccess field : field : " ^ Typing.string_of_type f.field_typ ^ "\n");*)
+    let register_expression = Register.fresh() in
+    let label_field = generate (Rtltree.Eload(register_expression, f.field_pos, destr, destl)) in
+    let label_expression = expr e.expr_node register_expression label_field in
+    label_expression;
+    (* TODO : deref_nul : p = 0; putchar(p->a) *)
+  end;
   | Ttree.Eassign_field (a,b,c)-> raise_error "assign field not yet implemented";
   | Ttree.Esizeof a -> raise_error "sizeof not yet implemented";
 
