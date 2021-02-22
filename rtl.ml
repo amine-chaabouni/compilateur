@@ -100,14 +100,21 @@ let rec expr e destr destl = match e with
     if(e.expr_typ = Ttree.Ttypenull) then raise_error "Null type can't be field accessed";
     (*print_string ("RTL Eaccess field : expression : " ^ Typing.string_of_type e.expr_typ ^ "\n");
     print_string ("RTL Eaccess field : field : " ^ Typing.string_of_type f.field_typ ^ "\n");*)
-    let register_expression = Register.fresh() in
-    let label_field = generate (Rtltree.Eload(register_expression, f.field_pos, destr, destl)) in
-    let label_expression = expr e.expr_node register_expression label_field in
+    (*let register_expression = Register.fresh() in*)
+    let label_field = generate (Rtltree.Eload(destr, f.field_pos * wordsize, destr, destl)) in
+    let label_expression = expr e.expr_node destr label_field in
     label_expression;
-    (* TODO : deref_nul : p = 0; putchar(p->a) *)
   end;
-  | Ttree.Eassign_field (a,b,c)-> raise_error "assign field not yet implemented";
-  | Ttree.Esizeof a -> raise_error "sizeof not yet implemented";
+  | Ttree.Eassign_field (expl,f,e)-> begin
+    let register_left = Register.fresh() in
+    let label_field = generate (Rtltree.Estore(destr, register_left, f.field_pos * wordsize, destl)) in
+    let label_left = expr expl.expr_node register_left label_field in
+    let label_expression = expr e.expr_node destr label_left in
+    label_expression;
+  end;
+  | Ttree.Esizeof str -> begin
+    generate (Rtltree.Econst(Int32.of_int (str.str_size*wordsize), destr, destl))
+  end;
 
 
 and treat_unop e destr destl = function
