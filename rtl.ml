@@ -160,7 +160,10 @@ and treat_binop e1 e2 destr destl binop =
   | Ptree.Badd -> Ops.Madd (*TODO : Implement a better add to take into account constants and use addi*)
   | Ptree.Bsub -> Ops.Msub
   | Ptree.Bmul -> Ops.Mmul
-  | Ptree.Bdiv -> Ops.Mdiv
+  | Ptree.Bdiv -> begin
+    if(e2.expr_typ = Ttree.Ttypenull) then raise_error "Division by zero"
+    else Ops.Mdiv (*TODO : divion by zero *)
+  end;
   | _ -> raise_error "Should not come to this case (Band/Bor)" in
 
   let instruction_binop =  Embinop(operation, reg_e2, destr, !label_next) in
