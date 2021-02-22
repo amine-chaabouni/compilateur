@@ -156,14 +156,13 @@ and boolean_op op destr destl label_next local_reg =
 
 and condition_boolean_op binop (e1: Ttree.expr) (e2: Ttree.expr) truel falsel local_reg =
   let reg_e1 = Register.fresh() and reg_e2 = Register.fresh() in
-  let r1 = ref reg_e1 and r2 = ref reg_e2 in
-  let op = match binop with
-  | Ptree.Blt -> Ops.Mjl;
-  | Ptree.Ble -> Ops.Mjle
-  | Ptree.Bgt -> r1 := reg_e2; r2 := reg_e1; Ops.Mjl
-  | Ptree.Bge -> r1 := reg_e2; r2 := reg_e1; Ops.Mjle
+  let op, r1, r2 = match binop with
+  | Ptree.Blt -> Ops.Mjl, reg_e1, reg_e2
+  | Ptree.Ble -> Ops.Mjle, reg_e1, reg_e2
+  | Ptree.Bgt -> Ops.Mjl, reg_e2, reg_e1
+  | Ptree.Bge -> Ops.Mjle, reg_e2, reg_e1
   | _ -> raise_error "ha" in
-  let instruction_branch = Embbranch(op, !r2, !r1, truel, falsel) in
+  let instruction_branch = Embbranch(op, r2, r1, truel, falsel) in
   let label_binop = generate instruction_branch in
   let label_put_e2 = expr e2.expr_node reg_e2 label_binop local_reg in
   let label_put_e1 = expr e1.expr_node reg_e1 label_put_e2 local_reg in
