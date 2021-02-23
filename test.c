@@ -1,10 +1,10 @@
 
-int fact(int n) {
-  if (n <= 1) return 1;
-  return n * fact(n-1);
-}
+// optimiser 0 / e en 0 quand e est pure n'est pas correct
+// si e peut être nulle
+
 int main() {
   int x;
-  x = 1;
-  return fact(42);
+  x = 42;
+  putchar(0 / (x - x));
+  return 0;
 }

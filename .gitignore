@@ -1,3 +1,4 @@
-_build/
+_build
 .vscode/
 tests/
+tests-v1.tar.gz
