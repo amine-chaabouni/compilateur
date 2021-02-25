@@ -162,7 +162,7 @@ and treat_binop e1 e2 destr destl binop =
   | Ptree.Bmul -> Ops.Mmul
   | Ptree.Bdiv -> begin
     if(e2.expr_typ = Ttree.Ttypenull) then raise_error "Division by zero"
-    else Ops.Mdiv (*TODO : divion by zero *)
+    else Ops.Mdiv
   end;
   | _ -> raise_error "Should not come to this case (Band/Bor)" in
 
