@@ -21,12 +21,12 @@ type instr =
   | Emubranch of mubranch * register * label * label
   | Embbranch of mbbranch * register * register * label * label
   | Egoto of label
-  | Ecall of ident * int * label
       (** l'entier est le nombre de paramètres passés dans des registres *)
+  | Ecall of ident * int * label
   | Ealloc_frame of label
   | Edelete_frame of label
-  | Eget_param of int * register * label
       (** [r <- ofs(rbp)] *)
+  | Eget_param of int * register * label
   | Epush_param of register * label
   | Ereturn
 
