@@ -12,7 +12,6 @@ exception Error of string
 let raise_error  error =
   raise (Error error);;
 
-let graph = ref Label.M.empty
 
 let functions = (Hashtbl.create 16 : (string, string list) Hashtbl.t);;
 Hashtbl.add functions "putchar" ("c"::[]);;
@@ -30,6 +29,7 @@ let associate_register id =
     raise_error ("Undefined variable" ^ id);
   with Register_Found x -> x;;
 
+let graph = ref Label.M.empty
 
 let generate i =
   let l = Label.fresh () in
@@ -273,8 +273,7 @@ let deffun (fun_definition:Ttree.decl_fun) =
   and local_reg = ref Register.S.empty in
   let local_var_to_reg = Hashtbl.create 16 in
   let fun_formals = List.map  (function x -> let register = Register.fresh()
-    in local_reg := Register.S.add register !local_reg;
-    Hashtbl.add local_var_to_reg x register;
+    in Hashtbl.add local_var_to_reg x register;
     register) (* TODO : Formals are a step higher than the declarations of the body?
                         Should maybe see this *)
     id_params
