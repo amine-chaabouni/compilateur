@@ -18,4 +18,6 @@ type set = S.t
 val print : Format.formatter -> t -> unit
   (** fonction d'impression *)
 
+val print_set: Format.formatter -> set -> unit
 
+val print_list: Format.formatter -> t list -> unit

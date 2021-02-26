@@ -14,4 +14,10 @@ type set = S.t
 
 let print = Format.pp_print_string
 
+let print_set fmt s =
+  Pp.print_list Pp.comma Format.pp_print_string fmt (S.elements s)
+
+let print_list fmt s =
+  Pp.print_list Pp.comma Format.pp_print_string fmt s
+
 let of_string l = l
