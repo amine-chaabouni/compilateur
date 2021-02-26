@@ -66,15 +66,15 @@ val succ: instr -> label list
 val def_use: instr -> register list * register list
   (** calcul des définitions et utilisations de chaque instruction *)
 
-val visit: (label -> instr -> live_info -> unit) -> cfg -> label -> unit
+val visit: bool -> (label -> instr -> live_info -> bool -> unit) -> cfg -> label -> unit
   (** visite le graphe de flot de contrôle à partir d'une étiquette donnée *)
 
 (** {2 Fonctions d'impression, pour debugger} *)
 
 val print_instr: Format.formatter -> instr -> unit
 
-val print_graph: Format.formatter -> cfg -> label -> unit
+val print_graph: Format.formatter -> bool -> cfg -> label -> unit
 
-val print_deffun: Format.formatter -> deffun -> unit
+val print_deffun: Format.formatter -> bool -> deffun -> unit
 
-val print_file: Format.formatter -> file -> unit
+val print_file: Format.formatter -> file -> bool -> unit

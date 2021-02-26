@@ -265,7 +265,7 @@ let print_live_info fmt li =
   fprintf fmt "d={%a}@ u={%a}@ i={%a}@ o={%a}"(* pred={%a} succ={%a}*)
     print_set li.defs print_set li.uses print_set li.ins print_set li.outs (*print_label_set li.pred print_label_list li.succ *)
 
-let visit f g entry =
+let visit life_cycle f g entry =
   let map_info = liveness g in
   let visited = Hashtbl.create 97 in
   let rec visit l =
@@ -273,23 +273,30 @@ let visit f g entry =
       Hashtbl.add visited l ();
       let i = Label.M.find l g in
       let info = Label.M.find l map_info in
-      f l i info;
+      f l i info life_cycle;
       List.iter visit (succ i)
     end
   in
   visit entry
 
-let print_graph fmt =
-  visit (fun l i info -> fprintf fmt "%a: %a %a@\n" Label.print l print_instr i print_live_info info)
+let printed fmt l i info life_cycle = 
+  if life_cycle then
+    fprintf fmt "%a: %a %a@\n" Label.print l print_instr i print_live_info info
+  else
+    fprintf fmt "%a: %a@\n" Label.print l print_instr i
 
-let print_deffun fmt f =
+
+let print_graph fmt life_cycle=
+  visit life_cycle (printed fmt)
+
+let print_deffun fmt life_cycle f =
   fprintf fmt "%s(%d)@\n" f.fun_name f.fun_formals;
   fprintf fmt "  @[";
   fprintf fmt "entry : %a@\n" Label.print f.fun_entry;
   fprintf fmt "locals: @[%a@]@\n" Register.print_set f.fun_locals;
-  print_graph fmt f.fun_body f.fun_entry;
+  print_graph fmt life_cycle f.fun_body f.fun_entry ;
   fprintf fmt "@]@."
 
-let print_file fmt p =
+let print_file fmt p life_cycle=
   fprintf fmt "=== ERTL =================================================@\n";
-  List.iter (print_deffun fmt) p.funs
+  List.iter (print_deffun fmt life_cycle) p.funs
