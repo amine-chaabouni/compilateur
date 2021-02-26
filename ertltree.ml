@@ -94,7 +94,7 @@ let print_instr fmt = function
       fprintf fmt "mov $%ld %a  --> %a" n Register.print r Label.print l
   | Eload (r1, n, r2, l) ->
       fprintf fmt "mov %d(%a) %a  --> %a"
-        n Register.print r1 Register.print r2 Label.print l
+        n Register.print r1 Register.print r2 Label.print l;
   | Estore (r1, r2, n, l) ->
       fprintf fmt "mov %a %d(%a)  --> %a"
         Register.print r1 n Register.print r2 Label.print l
@@ -148,20 +148,139 @@ let succ = function
   | Ereturn ->
       []
 
+
+exception Error of string
+
+let raise_error  error =
+  raise (Error error);;
+
+
+type live_info = {
+  instr: instr;
+  succ: Label.t list;             (* successeurs *)
+  mutable pred: Label.set;        (* prédécesseurs *)
+  defs: Register.set;             (* définitions *)
+  uses: Register.set;             (* utilisations *)
+  mutable  ins: Register.set;     (* variables vivantes en entrée *)
+  mutable outs: Register.set;     (* variables vivantes en sortie *)
+}
+
+
+
+
+let liveness cfg =
+  let info_map = ref Label.M.empty in
+
+  (* Remplir le tableau à partir du graphe de flot de contrôle *)
+  let convert_instr_info instr =
+    let defs, uses = def_use instr in
+    {
+      instr = instr;
+      succ = succ instr;
+      pred = Label.S.empty;
+      defs = Register.S.of_list defs;
+      uses = Register.S.of_list uses;
+      ins = Register.S.empty;
+      outs = Register.S.empty;
+    } in
+  Label.M.iter (fun label instr -> info_map := Label.M.add label (convert_instr_info instr) !info_map) cfg;
+
+
+  (* Parcourir le tableau pour remplir pred *)
+  let fill_pred label info =
+    (* To this one successor, tell that info is a predecessor *)
+    let from_succ_to_pred successor = 
+      let succ_info = try
+        Label.M.find successor !info_map
+      with Not_found -> raise_error "Not_found in filling preds. Should not happen."
+      in succ_info.pred <- Label.S.add label succ_info.pred;
+    in
+    List.iter from_succ_to_pred info.succ in
+  Label.M.iter fill_pred !info_map;
+
+  (* Kildall's Algorithm *)
+  (* Keep a list of labels to work on *)
+  let list_labels = ref Label.S.empty in
+  Label.M.iter (fun label info -> list_labels := Label.S.add label !list_labels;) !info_map;
+  
+  (* Update ins and outs *)
+  let update label = 
+    (* Making the union of this successor's ins and previous ins *)
+    let gather_succ_ins union_ins successor = 
+      let succ_info = try
+        Label.M.find successor !info_map
+      with Not_found -> raise_error "Not found in gathering ins. Should not happen."
+      in
+      Register.S.union union_ins succ_info.ins
+    in
+
+    (* Putting the predecessors in the list *)
+    let add_preds_to_list predecessors = 
+      Label.S.iter (fun label -> list_labels := Label.S.add label !list_labels;) predecessors
+    in
+
+    (* Get the info of the label and update ins and outs *)
+    let info = try
+      Label.M.find label !info_map
+    with Not_found -> raise_error "Not found in updating ins/outs. Should not happen."
+    in
+    let old_in = info.ins in
+    info.outs <- List.fold_left gather_succ_ins Register.S.empty info.succ;
+    info.ins <- Register.S.union info.uses (Register.S.diff info.outs info.defs);
+    if not (Register.S.equal old_in info.ins) then
+      add_preds_to_list info.pred;
+
+  in
+
+
+  (* Iterate on the list of labels to update *)
+  let rec iterator() = 
+    (*print_string "iterator \n";*)
+    if(not(Label.S.is_empty !list_labels)) then
+      begin
+        let label = Label.S.min_elt !list_labels in
+        list_labels := Label.S.remove label !list_labels;
+        update label;
+        iterator();
+      end
+    else ();
+  in
+
+  
+  iterator();
+    
+
+  !info_map;;
+
+
+let print_set = Register.print_set
+
+let print_label_set = Label.print_set
+
+let print_label_list = Label.print_list
+
+
+
+let print_live_info fmt li =
+  fprintf fmt "d={%a}@ u={%a}@ i={%a}@ o={%a}"(* pred={%a} succ={%a}*)
+    print_set li.defs print_set li.uses print_set li.ins print_set li.outs (*print_label_set li.pred print_label_list li.succ *)
+
 let visit f g entry =
+  let map_info = liveness g in
   let visited = Hashtbl.create 97 in
   let rec visit l =
     if not (Hashtbl.mem visited l) then begin
       Hashtbl.add visited l ();
       let i = Label.M.find l g in
-      f l i;
+      let info = Label.M.find l map_info in
+      f l i info;
       List.iter visit (succ i)
     end
   in
   visit entry
 
 let print_graph fmt =
-  visit (fun l i -> fprintf fmt "%a: %a@\n" Label.print l print_instr i)
+  visit (fun l i info -> fprintf fmt "%a: %a %a@\n" Label.print l print_instr i print_live_info info)
 
 let print_deffun fmt f =
   fprintf fmt "%s(%d)@\n" f.fun_name f.fun_formals;
