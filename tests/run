@@ -179,7 +179,7 @@ for f in exec/*.c; do
     expected=exec/`basename $f .c`.out
     max=`expr $max + 1`;
     rm -f out
-    if $compilo --interp-rtl $f > out; then
+    if $compilo --interp-ertl $f > out; then
 	score_comp=`expr $score_comp + 1`;
 	if cmp --quiet out $expected; then
 	    score_test=`expr $score_test + 1`
