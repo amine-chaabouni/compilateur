@@ -50,6 +50,39 @@ let make info_map =
   !ltl_graph;;
 
 
+
+
+type color = Ltltree.operand
+type coloring = color Register.map
+
+
+exception Reg_Is_Colorable of Register.t
+let find_colorable_register todo potentiels =
+  let process_reg r =
+    let potential_colors = Register.M.find r potentiels in
+    if not (Register.S.is_empty potential_colors) then
+      raise (Reg_Is_Colorable r)
+    else
+      ()
+  in
+  Register.S.iter process_reg todo
+
+let colorize ig =
+  let pseudo_registers = Seq.filter_map (function (r, _) -> if Register.is_pseudo r then Some r else None) (Register.M.to_seq ig) in 
+  let todo = ref (Register.S.of_seq pseudo_registers) in
+  let potentiels = ref Register.M.empty in
+  let add__reg_to_potentiels r =
+    let potential_colors = Register.S.diff Register.allocatable (Register.M.find r ig).intfs in
+    potentiels := Register.M.add r potential_colors !potentiels
+  in
+  Register.S.iter add__reg_to_potentiels !todo;
+  while not (Register.S.is_empty !todo) do
+    try find_colorable_register !todo !potentiels with
+    | Reg_Is_Colorable r -> 
+      
+    
+
+(* Function to print igraph *)
 let print ig =
   Register.M.iter (fun r arcs ->
     Format.printf "%s: prefs=@[%a@] intfs=@[%a@]@." (r :> string)
