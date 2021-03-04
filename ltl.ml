@@ -1,89 +1,85 @@
+open Ltltree
+
 exception Error of string
+let ltl_graph = ref Label.M.empty;;
 
-let raise_error  error =
-  raise (Error error);;
+let generate i =
+  let l = Label.fresh () in
+  ltl_graph := Label.M.add l i !ltl_graph;
+  l
 
-type arcs = { mutable prefs: Register.set; mutable intfs: Register.set }
+let associate l i =
+  ltl_graph := Label.M.add l i !ltl_graph;;
+  
 
-type igraph = arcs Register.map
-
-let make info_map = 
-  let ltl_graph = ref Register.M.empty in
-  (* First loop to add preference arcs *)
-  let find_arc register = 
-    try 
-      Register.M.find register !ltl_graph
-    with Not_found -> begin
-      let node = {prefs = Register.S.empty; intfs = Register.S.empty}
-      in ltl_graph := Register.M.add register node !ltl_graph;
-      node
-    end
-  in
-  let find_mov_instr = function
-    | Ertltree.Embinop (Ops.Mmov, rs, rd, _) -> if rs <> rd then begin
-      let arc_rs = find_arc rs in arc_rs.prefs <- Register.S.add rd arc_rs.prefs;
-      let arc_rd = find_arc rd in arc_rd.prefs <- Register.S.add rs arc_rd.prefs;
-    end
-    | _ -> ()
-  in
-  Label.M.iter (fun label info -> find_mov_instr info.instr) info_map;
-
-  (* Second loop to add interference arcs *)
-  let add_intfs register interfering = 
-    let arc = find_arc register in
-    let add_interference r =
-      arc.intfs <- Register.S.add r arc.intfs;
-      let other_arc = find_arc r in
-      other_arc.intfs <- Register.S.add register other_arc.intfs
-    in 
-    Register.S.iter add_interference interfering
-  in
-  let fill_intfs info = 
-    match info.instr with
-    | Ertltree.Embinop (Ops.Mmov, rs, rd, _) -> begin
-      let to_remove = Register.S.of_list [rs ; rd] in
-      add_intfs rs (Register.S.diff info.outs to_remove)
-    end
-    | _ -> Register.S.iter (function d -> add_intfs d (Register.S.remove d info.outs) ) info.defs 
-  in
-  Label.M.iter (fun label info -> fill_intfs info) info_map;
-  !ltl_graph;;
+let lookup c r =
+  if Register.is_hw r then Reg r else Register.M.find r c
 
 
+let convert_instr colorization m label instr = 
+  let converted_instruction = match instr with
+  (* Unchanged instructions *)
+  | Ertltree.Eload(register1, integer, register2, label) -> begin
+    if(register1 = register2 && integer = 0) then Ltltree.Egoto label
+    else Ltltree.Eload(register1, integer, register2, label)
+  end
+  | Ertltree.Estore(register1, register2, integer, label) -> begin
+    if(register1 = register2 && integer = 0) then Ltltree.Egoto label
+    else Ltltree.Estore(register1, register2, integer, label)
+  end
+  | Ertltree.Egoto label -> Ltltree.Egoto label
+  | Ertltree.Ereturn -> Ltltree.Ereturn
+  (* Change register with operand *)
+  | Ertltree.Econst (integer, register, label) -> Ltltree.Econst(integer, lookup colorization register, label)
+  | Ertltree.Emunop (munop, register, label) -> Ltltree.Emunop(munop, lookup colorization register, label)
+  | Ertltree.Embinop (binop, register1, register2, label) -> begin 
+    (* In case the instruction is mov %rax %rax, just ignore it and go to the next instruction *)
+    let operand1 = lookup colorization register1 and operand2 = lookup colorization register2 in
+    if(binop = Ops.Mmov && operand1 = operand2) then Ltltree.Egoto label
+    else Ltltree.Embinop(binop, operand1, operand2, label)
+  end
+  | Ertltree.Emubranch (mubranch, register, label1, label2) -> Ltltree.Emubranch(mubranch, lookup colorization register, label1, label2)
+  | Ertltree.Embbranch (mbbranch, register1, register2, label1, label2) -> Ltltree.Embbranch(mbbranch, lookup colorization register1, lookup colorization register2, label1, label2)
+  | Ertltree.Epush_param (register, label) -> Ltltree.Epush(lookup colorization register, label)
+  (* Call instruction *)
+  | Ertltree.Ecall(ident, integer, label) -> Ltltree.Ecall(ident, label)
+  (* Alloc and delete frame *)
+  | Ertltree.Ealloc_frame label -> begin
+    let label_add = if m<>0 then
+      generate (Ltltree.Emunop(Ops.Maddi (Int32.of_int(-8*m)), Ltltree.Reg Register.rsp, label))
+    else label
+    in
+    let label_mov = generate (Ltltree.Embinop(Ops.Mmov, Ltltree.Reg Register.rsp, Ltltree.Reg Register.rbp, label_add)) in
+    let instruction_push = Ltltree.Epush(Ltltree.Reg Register.rbp, label_mov) in
+    instruction_push
+  end
+  | Ertltree.Edelete_frame label -> begin
+    let label_pop = generate(Ltltree.Epop(Register.rbp, label)) in
+    let instruction_mov = Ltltree.Embinop(Ops.Mmov, Ltltree.Reg Register.rbp, Ltltree.Reg Register.rsp, label_pop) in
+    instruction_mov
+  end
+  (* Get param*)
+  | Ertltree.Eget_param(integer, register, label) -> Ltltree.Eload(Register.rbp, integer, register, label)
+  in associate label converted_instruction;;
+
+let convert_graph ertl_graph m =
+  let map_info = Ertltree.liveness ertl_graph in
+  let igraph = Interference.make map_info in
+  let colorization, nb_spilled = Colorize.colorize igraph in
+  Label.M.iter (convert_instr colorization m) ertl_graph;;
 
 
-type color = Ltltree.operand
-type coloring = color Register.map
+
+let convert_ertl (fun_def:Ertltree.deffun) =
+  convert_graph fun_def.fun_body (Register.S.cardinal fun_def.fun_locals);
+
+  {
+    fun_name = fun_def.fun_name;
+    fun_entry = fun_def.fun_entry;
+    fun_body = !ltl_graph;
+  };;
 
 
-exception Reg_Is_Colorable of Register.t
-let find_colorable_register todo potentiels =
-  let process_reg r =
-    let potential_colors = Register.M.find r potentiels in
-    if not (Register.S.is_empty potential_colors) then
-      raise (Reg_Is_Colorable r)
-    else
-      ()
-  in
-  Register.S.iter process_reg todo
-
-let colorize ig =
-  let pseudo_registers = Seq.filter_map (function (r, _) -> if Register.is_pseudo r then Some r else None) (Register.M.to_seq ig) in 
-  let todo = ref (Register.S.of_seq pseudo_registers) in
-  let potentiels = ref Register.M.empty in
-  let add__reg_to_potentiels r =
-    let potential_colors = Register.S.diff Register.allocatable (Register.M.find r ig).intfs in
-    potentiels := Register.M.add r potential_colors !potentiels
-  in
-  Register.S.iter add__reg_to_potentiels !todo;
-  while not (Register.S.is_empty !todo) do
-    try find_colorable_register !todo !potentiels with
-    | Reg_Is_Colorable r -> 
-      
-    
-
-(* Function to print igraph *)
-let print ig =
-  Register.M.iter (fun r arcs ->
-    Format.printf "%s: prefs=@[%a@] intfs=@[%a@]@." (r :> string)
-      Register.print_set arcs.prefs Register.print_set arcs.intfs) ig
+let program (p:Ertltree.file) =
+  let deffun = List.map convert_ertl p.funs in
+  {funs = deffun};;
