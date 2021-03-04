@@ -57,11 +57,10 @@ let rec expr e destr destl = match e with
       graph := Label.M.add truel (Rtltree.Econst(one_i32, destr, destl)) !graph;
       label;
     (*For the rest, treat it normally*)
+    | Ptree.Badd -> treat_add e1 e2 destr destl Ptree.Badd
     | _ -> treat_binop e1 e2 destr destl binop
   end;
   | Ttree.Eassign_local (id, e) -> begin
-    (*print_string ("assign local : " ^id ^"\n");
-    print_string ("type of assign : " ^ (Typing.string_of_type e.expr_typ) ^"\n");*)
     (* Find the register associated to the variable.
     If the register doesn't exist already, create a fresh one
     Add the association to the table and add the register to the locals*)
@@ -157,20 +156,42 @@ and treat_binop e1 e2 destr destl binop =
     boolean_op Ops.Msetg destr destl label_next;  Ops.Msub;
   | Ptree.Bge ->
     boolean_op Ops.Msetge destr destl label_next; Ops.Msub;
-  | Ptree.Badd -> Ops.Madd (*TODO : Implement a better add to take into account constants and use addi*)
   | Ptree.Bsub -> Ops.Msub
   | Ptree.Bmul -> Ops.Mmul
   | Ptree.Bdiv -> begin
     if(e2.expr_typ = Ttree.Ttypenull) then raise_error "Division by zero"
     else Ops.Mdiv
   end;
-  | _ -> raise_error "Should not come to this case (Band/Bor)" in
+  | _ -> raise_error "Should not come to this case (Badd/Band/Bor)" in
 
   let instruction_binop =  Embinop(operation, reg_e2, destr, !label_next) in
   let label_binop = generate instruction_binop in
   let label_put_e2 = expr e2.expr_node reg_e2 label_binop in
   let label_put_e1 = expr e1.expr_node destr label_put_e2 in
   label_put_e1
+
+and treat_add e1 e2 destr destl binop =
+  match e1.expr_node, e2.expr_node with
+  | (_, Ttree.Econst c) -> begin
+    let instruction_addi =  Emunop(Ops.Maddi c, destr, destl) in
+    let label_addi = generate instruction_addi in
+    let label_put_e1 = expr e1.expr_node destr label_addi in
+    label_put_e1
+  end
+  | (Ttree.Econst c, _) -> begin
+    let instruction_addi =  Emunop(Ops.Maddi c, destr, destl) in
+    let label_addi = generate instruction_addi in
+    let label_put_e2 = expr e2.expr_node destr label_addi in
+    label_put_e2
+  end
+  | _ -> begin
+    let reg_e2 = Register.fresh() in
+    let instruction_binop =  Embinop(Ops.Madd, reg_e2, destr, destl) in
+    let label_binop = generate instruction_binop in
+    let label_put_e2 = expr e2.expr_node reg_e2 label_binop in
+    let label_put_e1 = expr e1.expr_node destr label_put_e2 in
+    label_put_e1
+  end
 
 and boolean_op op destr destl label_next =
   let reg_zero = Register.fresh() in
