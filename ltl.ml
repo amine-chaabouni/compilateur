@@ -1,5 +1,5 @@
 open Ltltree
-
+let word_size = 8
 exception Error of string
 let ltl_graph = ref Label.M.empty;;
 
@@ -25,7 +25,16 @@ let convert_instr colorization m label instr =
     else match op1, op2 with
     | Ltltree.Reg r1, Ltltree.Reg r2 -> 
       Ltltree.Eload(r1, integer, r2, label)
-    | _ -> Ltltree.Eload(register1, integer, register2, label)
+    | Ltltree.Reg r1, Ltltree.Spilled s2 ->
+      let label_mov_tmp_to_reg = generate(Ltltree.Embinop(Ops.Mmov, Ltltree.Reg Register.tmp1, Ltltree.Spilled (-word_size*s2), label)) in
+      Ltltree.Eload(r1, integer, Register.tmp1, label_mov_tmp_to_reg)
+    | Ltltree.Spilled s1, Ltltree.Reg r2 ->
+      let label_load_tmp_to_reg = generate(Ltltree.Eload(Register.tmp1, integer, r2, label)) in
+      Ltltree.Embinop(Ops.Mmov, Ltltree.Spilled (-word_size*s1), Ltltree.Reg Register.tmp1, label_load_tmp_to_reg)
+    | Ltltree.Spilled s1, Ltltree.Spilled s2 ->
+      let label_mov_tmp2_to_reg2 = generate(Ltltree.Embinop(Ops.Mmov, Ltltree.Reg Register.tmp2, Ltltree.Spilled (-word_size*s2), label)) in
+      let label_load_tmp1_in_tmp2 = generate(Ltltree.Eload(Register.tmp1, integer, Register.tmp2, label_mov_tmp2_to_reg2)) in
+      Ltltree.Embinop(Ops.Mmov, Ltltree.Spilled (-word_size*s1), Ltltree.Reg Register.tmp1, label_load_tmp1_in_tmp2)
   end
   | Ertltree.Estore(register1, register2, integer, label) -> begin
     let op1 = lookup colorization register1 and op2 = lookup colorization register2 in
@@ -33,7 +42,17 @@ let convert_instr colorization m label instr =
     else match op1, op2 with
     | Ltltree.Reg r1, Ltltree.Reg r2 -> 
       Ltltree.Estore(r1, r2, integer, label)
-    | _ -> Ltltree.Estore(register1, register2, integer, label)
+    | Ltltree.Reg r1, Ltltree.Spilled s2 ->
+      (* Not sure here *)
+      let label_store_in_tmp = generate(Ltltree.Estore(r1, Register.tmp1, integer, label)) in
+      Ltltree.Embinop(Ops.Mmov, Ltltree.Spilled (-word_size*s2), Ltltree.Reg Register.tmp1, label_store_in_tmp)
+    | Ltltree.Spilled s1, Ltltree.Reg r2 ->
+      let label_store_from_tmp = generate(Ltltree.Estore(Register.tmp1, r2, integer, label)) in
+      Ltltree.Embinop(Ops.Mmov, Ltltree.Spilled (-word_size*s1), Ltltree.Reg Register.tmp1, label_store_from_tmp)
+    | Ltltree.Spilled s1, Ltltree.Spilled s2 ->
+      let label_store = generate(Ltltree.Estore(Register.tmp1, Register.tmp2, integer, label)) in
+      let label_mov_s2 = generate(Ltltree.Embinop(Ops.Mmov, Ltltree.Spilled (-word_size*s2), Ltltree.Reg Register.tmp2, label_store)) in
+      Ltltree.Embinop(Ops.Mmov, Ltltree.Spilled (-word_size*s1), Ltltree.Reg Register.tmp1, label_mov_s2)
   end
   | Ertltree.Egoto label -> Ltltree.Egoto label
   | Ertltree.Ereturn -> Ltltree.Ereturn
