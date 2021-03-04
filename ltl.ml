@@ -60,10 +60,27 @@ let convert_instr colorization m label instr =
   | Ertltree.Econst (integer, register, label) -> Ltltree.Econst(integer, lookup colorization register, label)
   | Ertltree.Emunop (munop, register, label) -> Ltltree.Emunop(munop, lookup colorization register, label)
   | Ertltree.Embinop (binop, register1, register2, label) -> begin 
-    (* In case the instruction is mov %rax %rax, just ignore it and go to the next instruction *)
     let operand1 = lookup colorization register1 and operand2 = lookup colorization register2 in
-    if(binop = Ops.Mmov && operand1 = operand2) then Ltltree.Egoto label
-    else Ltltree.Embinop(binop, operand1, operand2, label)
+    match binop with
+    (* In case the instruction is mov %rax %rax, just ignore it and go to the next instruction *)
+    | Ops.Mmov -> if(operand1 = operand2) then Ltltree.Egoto label else Ltltree.Embinop(Ops.Mmov, operand1, operand2, label);
+    | Ops.Mmul -> begin
+      match operand2 with
+      | Ltltree.Reg r2 -> Ltltree.Embinop(Ops.Mmul, operand1, Ltltree.Reg r2, label)
+      | Ltltree.Spilled s2 -> begin
+        let label_mov_back = generate(Ltltree.Embinop(Ops.Mmov, Ltltree.Reg Register.tmp1, Ltltree.Spilled s2, label)) in
+        let label_mul = generate(Ltltree.Embinop(Ops.Mmul, operand1, Ltltree.Reg Register.tmp1, label_mov_back)) in
+        Ltltree.Embinop(Ops.Mmov, Ltltree.Spilled s2, Ltltree.Reg Register.tmp1, label_mul);
+      end
+    end
+    | _ ->
+      match operand1, operand2 with
+      (* Binop instruction can't have both operands on stack *)
+      | Ltltree.Spilled s1, Ltltree.Spilled s2 -> begin
+        let label_binop = generate(Ltltree.Embinop(binop, Ltltree.Reg Register.tmp1, Ltltree.Spilled s2, label)) in
+        Ltltree.Embinop(Ops.Mmov, Ltltree.Spilled s1, Ltltree.Reg Register.tmp1, label_binop);
+      end
+      | _ -> Ltltree.Embinop(binop, operand1, operand2, label)
   end
   | Ertltree.Emubranch (mubranch, register, label1, label2) -> Ltltree.Emubranch(mubranch, lookup colorization register, label1, label2)
   | Ertltree.Embbranch (mbbranch, register1, register2, label1, label2) -> Ltltree.Embbranch(mbbranch, lookup colorization register1, lookup colorization register2, label1, label2)
