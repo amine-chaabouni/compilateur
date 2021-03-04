@@ -20,12 +20,20 @@ let convert_instr colorization m label instr =
   let converted_instruction = match instr with
   (* Unchanged instructions *)
   | Ertltree.Eload(register1, integer, register2, label) -> begin
-    if(register1 = register2 && integer = 0) then Ltltree.Egoto label
-    else Ltltree.Eload(register1, integer, register2, label)
+    let op1 = lookup colorization register1 and op2 = lookup colorization register2 in
+    if(op1 = op2 && integer = 0) then Ltltree.Egoto label
+    else match op1, op2 with
+    | Ltltree.Reg r1, Ltltree.Reg r2 -> 
+      Ltltree.Eload(r1, integer, r2, label)
+    | _ -> Ltltree.Eload(register1, integer, register2, label)
   end
   | Ertltree.Estore(register1, register2, integer, label) -> begin
-    if(register1 = register2 && integer = 0) then Ltltree.Egoto label
-    else Ltltree.Estore(register1, register2, integer, label)
+    let op1 = lookup colorization register1 and op2 = lookup colorization register2 in
+    if(op1 = op2 && integer = 0) then Ltltree.Egoto label
+    else match op1, op2 with
+    | Ltltree.Reg r1, Ltltree.Reg r2 -> 
+      Ltltree.Estore(r1, r2, integer, label)
+    | _ -> Ltltree.Estore(register1, register2, integer, label)
   end
   | Ertltree.Egoto label -> Ltltree.Egoto label
   | Ertltree.Ereturn -> Ltltree.Ereturn
@@ -59,7 +67,12 @@ let convert_instr colorization m label instr =
     instruction_mov
   end
   (* Get param*)
-  | Ertltree.Eget_param(integer, register, label) -> Ltltree.Eload(Register.rbp, integer, register, label)
+  | Ertltree.Eget_param(integer, register, label) -> begin
+    let op = lookup colorization register in
+    match op with
+    | Ltltree.Reg r -> Ltltree.Eload(Register.rbp, integer, r, label)
+    | _ -> Ltltree.Eload(Register.rbp, integer, register, label)
+  end
   in associate label converted_instruction;;
 
 let convert_graph ertl_graph m =
