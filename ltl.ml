@@ -90,7 +90,10 @@ let convert_instr colorization m label instr =
     let op = lookup colorization register in
     match op with
     | Ltltree.Reg r -> Ltltree.Eload(Register.rbp, integer, r, label)
-    | _ -> Ltltree.Eload(Register.rbp, integer, register, label)
+    | Ltltree.Spilled s-> begin
+      let label_mov_tmp_to_stack = generate(Ltltree.Embinop(Ops.Mmov, Ltltree.Reg Register.tmp1, Ltltree.Spilled s, label)) in
+      Ltltree.Eload(Register.rbp, integer, Register.tmp1, label_mov_tmp_to_stack)
+    end
   end
   in associate label converted_instruction;;
 
