@@ -66,8 +66,8 @@ let rec expr e destr destl = match e with
     Add the association to the table and add the register to the locals*)
     let register = associate_register id in
     
-    let intruction_assign = Rtltree.Embinop(Ops.Mmov, destr, register, destl) in
-    let label_assign = generate intruction_assign in
+    let instruction_assign = Rtltree.Embinop(Ops.Mmov, destr, register, destl) in
+    let label_assign = generate instruction_assign in
     let label_expression = expr e.expr_node destr label_assign in
     label_expression;
   end;
@@ -144,6 +144,7 @@ and treat_binop e1 e2 destr destl binop =
   let reg_e2 = Register.fresh() in
   let label_next = ref destl in
   let operation = match binop with
+  (* TODO : Treat the constant case *)
   | Ptree.Beq -> 
     boolean_op Ops.Msete destr destl label_next;  Ops.Msub;
   | Ptree.Bneq-> 
