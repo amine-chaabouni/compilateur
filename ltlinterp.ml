@@ -75,14 +75,24 @@ let rec exec st gr l =
     set st r (Int64.of_int32 n);
     exec st gr l
   | Eload (r1, ofs, r2, l) ->
+    (*print_string "interpreting load : ";
+    Label.print std_formatter l;
+    print_string "\n";*)
     let p = getr st r1 in
     let v = load st ~ofs p in
+    (*print_string " load done";
+    print_string "\n";*)
     setr st r2 v;
     exec st gr l
   | Estore (r1, r2, ofs, l) ->
+    (*print_string "interpreting store : ";
+    Label.print std_formatter l;
+    print_string "\n";*)
     let p = getr st r2 in
     let v = getr st r1 in
     store st ~ofs p v;
+    (*print_string " store done";
+    print_string "\n";*)
     exec st gr l
   | Emunop (op, r1, l) ->
     unop st op r1;
@@ -116,6 +126,8 @@ let rec exec st gr l =
     exec st gr l
   | Ecall ("putchar", l) ->
     let n = getr st Register.rdi in
+    (*print_int (Int64.to_int n);
+    print_string "\n";*)
     Format.printf "%c" (Char.chr (Int64.to_int n));
     setr st Register.rax n;
     exec st gr l
@@ -126,10 +138,21 @@ let rec exec st gr l =
     exec st gr l
   | Epush (r, l) ->
     let v = get st r in
+    (*print_string "interpreting push : ";
+    Label.print std_formatter l;
+    print_string "\n";*)
     push st v;
+    (*print_string " push done";
+    print_string "\n";*)
     exec st gr l
   | Epop (r, l) ->
+    (*print_string "interpreting pop : ";
+    Label.print std_formatter l;
+    Register.print std_formatter r;
+    print_string "\n";*)
     let v = pop st in
+    (*print_string " pop done";
+    print_string "\n";*)
     setr st r v;
     exec st gr l
   | Ereturn ->

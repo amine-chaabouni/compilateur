@@ -261,12 +261,15 @@ let print_label_list = Label.print_list
 
 
 
+
 let print_live_info fmt li =
   fprintf fmt "d={%a}@ u={%a}@ i={%a}@ o={%a}"(* pred={%a} succ={%a}*)
     print_set li.defs print_set li.uses print_set li.ins print_set li.outs (*print_label_set li.pred print_label_list li.succ *)
 
 let visit life_cycle f g entry =
   let map_info = liveness g in
+  (*let ig = make map_info in
+  let cm,i = colorize ig in*)
   let visited = Hashtbl.create 97 in
   let rec visit l =
     if not (Hashtbl.mem visited l) then begin
@@ -277,7 +280,11 @@ let visit life_cycle f g entry =
       List.iter visit (succ i)
     end
   in
-  visit entry
+  visit entry;;
+  (*
+  print_ig ig;
+  print_cm cm;;
+  *)
 
 let printed fmt l i info life_cycle = 
   if life_cycle then

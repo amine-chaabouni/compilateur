@@ -69,6 +69,9 @@ val def_use: instr -> register list * register list
 val visit: bool -> (label -> instr -> live_info -> bool -> unit) -> cfg -> label -> unit
   (** visite le graphe de flot de contrôle à partir d'une étiquette donnée *)
 
+(** Liveness **)
+val liveness: instr Label.M.t -> live_info Label.M.t
+
 (** {2 Fonctions d'impression, pour debugger} *)
 
 val print_instr: Format.formatter -> instr -> unit
