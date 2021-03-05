@@ -37,11 +37,18 @@ let make (info_map:Ertltree.live_info Label.M.t) =
     match info.instr with
     | Ertltree.Embinop (Ops.Mmov, rs, rd, _) -> begin
       let to_remove = Register.S.of_list [rs ; rd] in
-      add_intfs rs (Register.S.diff info.outs to_remove)
+      add_intfs rd (Register.S.diff info.outs to_remove)
     end
     | _ -> Register.S.iter (function d -> add_intfs d (Register.S.remove d info.outs) ) info.defs 
   in
   Label.M.iter (fun label info -> fill_intfs info) info_map;
+  
+  (* Remove the prefs that exist in intfs *)
+  let clean_prefs r arc =
+    arc.prefs <- Register.S.filter (fun r -> not(Register.S.mem r arc.intfs)) arc.prefs;
+  in
+  
+  Register.M.iter clean_prefs !ltl_graph;
   !ltl_graph;;
   
 
