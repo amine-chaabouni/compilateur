@@ -60,9 +60,10 @@ let convert_instr colorization m label instr =
   | Ertltree.Emunop (munop, register, label) -> Ltltree.Emunop(munop, lookup colorization register, label)
   | Ertltree.Embinop (binop, register1, register2, label) -> begin 
     let operand1 = lookup colorization register1 and operand2 = lookup colorization register2 in
+    if(binop = Ops.Mmov && operand1 = operand2) then Ltltree.Egoto label
+    else
     match binop with
     (* In case the instruction is mov %rax %rax, just ignore it and go to the next instruction *)
-    | Ops.Mmov -> if(operand1 = operand2) then Ltltree.Egoto label else Ltltree.Embinop(Ops.Mmov, operand1, operand2, label);
     | Ops.Mmul -> begin
       match operand2 with
       | Ltltree.Reg r2 -> Ltltree.Embinop(Ops.Mmul, operand1, Ltltree.Reg r2, label)
