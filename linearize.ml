@@ -22,7 +22,7 @@ let map_label_to_function (l:Label.t) (id:string) = Hashtbl.add function_label l
 
 let operand = function
   | Ltltree.Reg reg -> X86_64.reg (X86_64.register64 reg)
-  | Ltltree.Spilled n -> X86_64.imm n;;
+  | Ltltree.Spilled n -> X86_64.ind ~ofs:n X86_64.rbp;;
 
 let find_label l= 
   (*Label.print std_formatter l;*)
@@ -54,14 +54,16 @@ let rec lin g l =
       | Ops.Maddi n   -> begin emit l (X86_64.addq  (X86_64.imm32 n) (operand r)); lin g label; end;
       | Ops.Msetei n  -> begin
         emit l (X86_64.cmpq  (X86_64.imm32 n) (operand r));
-        emit_wl (X86_64.sete (X86_64.reg X86_64.al));
-        emit_wl (X86_64.movzbq (X86_64.reg X86_64.al) (X86_64.rax));
+        emit_wl (X86_64.sete (X86_64.reg X86_64.r15b));
+        emit_wl (X86_64.movzbq (X86_64.reg X86_64.r15b) (X86_64.r15));
+        emit_wl (X86_64.movq (X86_64.reg X86_64.r15) (operand r));
         lin g label;
       end;
       | Ops.Msetnei n -> begin
         emit l (X86_64.cmpq  (X86_64.imm32 n) (operand r));
-        emit_wl (X86_64.setne (X86_64.reg X86_64.al));
-        emit_wl (X86_64.movzbq (X86_64.reg X86_64.al) (X86_64.rax));
+        emit_wl (X86_64.setne (X86_64.reg X86_64.r15b));
+        emit_wl (X86_64.movzbq (X86_64.reg X86_64.r15b) (X86_64.r15));
+        emit_wl (X86_64.movq (X86_64.reg X86_64.r15) (operand r));
         lin g label;
       end;
       
@@ -122,14 +124,17 @@ let rec lin g l =
     in
     let instruction = inst binop in
     emit l (X86_64.cmpq  (operand r1) (operand r2));
-    emit_wl (instruction (X86_64.reg X86_64.al));
-    emit_wl (X86_64.movzbq (X86_64.reg X86_64.al) (X86_64.rax));
+    emit_wl (instruction (X86_64.reg X86_64.r15b));
+    emit_wl (X86_64.movzbq (X86_64.reg X86_64.r15b) (X86_64.r15));
+    emit_wl (X86_64.movq (X86_64.reg X86_64.r15) (operand r2));
 
 
   and treat_mubranch mubranch r label2 label3 g l=
-    match mubranch with
+    let first_instruction = function
       | Ops.Mjz | Ops.Mjnz -> emit l (X86_64.testq (operand r) (operand r));
       | Ops.Mjlei n | Ops.Mjgi n-> emit l (X86_64.cmpq (X86_64.imm32 n) (operand r));
+    in
+
     let opposite = function
     | Ops.Mjz     -> Ops.Mjnz
     | Ops.Mjnz    -> Ops.Mjz
@@ -142,23 +147,33 @@ let rec lin g l =
     | Ops.Mjlei n -> X86_64.jle
     | Ops.Mjgi n  -> X86_64.jg
     in
-    
+
+    first_instruction mubranch;
 
     let asm_inst = instruction mubranch and asm_opp = instruction (opposite mubranch) in
 
     if(not(Hashtbl.mem visited label3)) then begin
-      (*print_string "didn't see the negatif\n";*)
+      (*print_string "didn't see the negatif, the positif is :";
+      Label.print std_formatter label2;
+      print_string "\n";*)
       emit_wl (asm_inst (label2:> string));
+      need_label label2;
       lin g label3;
       lin g label2;
     end else if(not(Hashtbl.mem visited label2)) then begin
       (*print_string "saw the negatif but didn't see the positif\n";*)
       emit_wl (asm_opp (label3:> string));
+      need_label label3;
       lin g label2;
       lin g label3;
     end else begin
-      (*print_string "saw the negatif and the positif\n";*)
+      (*print_string "saw the negatif : ";
+      Label.print std_formatter label3;
+      print_string " and the positif :";
+      Label.print std_formatter label2;
+      print_string "\n";*)
       emit_wl (asm_inst (label2:> string));
+      need_label label2;
       lin g label3; (* this will produce the jmp label3 instruction *)
     end;
 
@@ -184,11 +199,13 @@ let rec lin g l =
     end else if(not(Hashtbl.mem visited label2)) then begin
       (*print_string "saw the negatif but didn't see the positif\n";*)
       emit_wl (asm_opp (label3:> string));
+      need_label label3;
       lin g label2;
       lin g label3;
     end else begin
       (*print_string "saw the negatif and the positif\n";*)
       emit_wl (asm_inst (label2:> string));
+      need_label label2;
       lin g label3; (* this will produce the jmp label3 instruction *)
     end;;
 
