@@ -56,8 +56,10 @@ let rec expr e destr destl = match e with
       graph := Label.M.add falsel (Rtltree.Econst(zero_i32, destr, destl)) !graph;
       graph := Label.M.add truel (Rtltree.Econst(one_i32, destr, destl)) !graph;
       label;
+    | Ptree.Beq  -> treat_immediate e1 e2 destr destl Ops.Msete
+    | Ptree.Bneq  -> treat_immediate e1 e2 destr destl Ops.Msetne
+    | Ptree.Badd -> treat_immediate e1 e2 destr destl Ops.Madd
     (*For the rest, treat it normally*)
-    | Ptree.Badd -> treat_add e1 e2 destr destl Ptree.Badd
     | _ -> treat_binop e1 e2 destr destl binop
   end;
   | Ttree.Eassign_local (id, e) -> begin
@@ -172,28 +174,35 @@ and treat_binop e1 e2 destr destl binop =
   let label_put_e1 = expr e1.expr_node destr label_put_e2 in
   label_put_e1
 
-and treat_add e1 e2 destr destl binop =
+and treat_immediate e1 e2 destr destl binop =
+  let immediate_op c = match binop with
+  | Ops.Msete -> Ops.Msetei c
+  | Ops.Msetne-> Ops.Msetnei c
+  | Ops.Madd  -> Ops.Maddi c
+  | _ -> raise_error "Treat_immediate : case should not exist"
+  in
   match e1.expr_node, e2.expr_node with
   | (_, Ttree.Econst c) -> begin
-    let instruction_addi =  Emunop(Ops.Maddi c, destr, destl) in
+    let instruction_addi =  Emunop(immediate_op c, destr, destl) in
     let label_addi = generate instruction_addi in
     let label_put_e1 = expr e1.expr_node destr label_addi in
     label_put_e1
   end
   | (Ttree.Econst c, _) -> begin
-    let instruction_addi =  Emunop(Ops.Maddi c, destr, destl) in
+    let instruction_addi =  Emunop(immediate_op c, destr, destl) in
     let label_addi = generate instruction_addi in
     let label_put_e2 = expr e2.expr_node destr label_addi in
     label_put_e2
   end
   | _ -> begin
     let reg_e2 = Register.fresh() in
-    let instruction_binop =  Embinop(Ops.Madd, reg_e2, destr, destl) in
+    let instruction_binop =  Embinop(binop, reg_e2, destr, destl) in
     let label_binop = generate instruction_binop in
     let label_put_e2 = expr e2.expr_node reg_e2 label_binop in
     let label_put_e1 = expr e1.expr_node destr label_put_e2 in
     label_put_e1
   end
+
 
 and boolean_op op destr destl label_next =
   let reg_zero = Register.fresh() in
