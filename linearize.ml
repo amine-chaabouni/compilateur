@@ -75,7 +75,7 @@ let rec lin g l =
       | Ops.Madd -> begin emit l (X86_64.addq  (operand r1) (operand r2)); lin g label;end;
       | Ops.Msub -> begin emit l (X86_64.subq  (operand r1) (operand r2)); lin g label;end;
       | Ops.Mmul -> begin emit l (X86_64.imulq  (operand r1) (operand r2)); lin g label;end;
-      | Ops.Mdiv -> begin assert((operand r2) = X86_64.reg X86_64.rax); emit l (X86_64.idivq (operand r1)); lin g label; end;
+      | Ops.Mdiv -> begin emit l (X86_64.cqto); emit_wl (X86_64.idivq (operand r1)); lin g label; end;
       | _ -> treat_set binop r1 r2 l; lin g label;
     end
   | Ltltree.Emubranch(mubranch, r, label2, label3) -> treat_mubranch mubranch r label2 label3 g l
@@ -93,7 +93,6 @@ let rec lin g l =
     if (Hashtbl.mem visited label) then
       lin g label
     else
-      (* Don't think this works*)
       code := Label l :: !code;
       lin g label;
   end
