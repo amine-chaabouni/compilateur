@@ -96,12 +96,13 @@ let rec expr e destr destl = match e with
     label_first_param
   end;
   | Ttree.Eaccess_field (e,f)-> begin
-    if(e.expr_typ = Ttree.Ttypenull) then raise_error "Null type can't be field accessed";
+    (*if(e.expr_typ = Ttree.Ttypenull) then raise_error "Segmentation fault : Null type can't be field accessed";*)
     (*print_string ("RTL Eaccess field : expression : " ^ Typing.string_of_type e.expr_typ ^ "\n");
     print_string ("RTL Eaccess field : field : " ^ Typing.string_of_type f.field_typ ^ "\n");*)
     (*let register_expression = Register.fresh() in*)
-    let label_field = generate (Rtltree.Eload(destr, f.field_pos * wordsize, destr, destl)) in
-    let label_expression = expr e.expr_node destr label_field in
+    let register_var = Register.fresh() in
+    let label_field = generate (Rtltree.Eload(register_var, f.field_pos * wordsize, destr, destl)) in
+    let label_expression = expr e.expr_node register_var label_field in
     label_expression;
   end;
   | Ttree.Eassign_field (expl,f,e)-> begin
@@ -160,8 +161,8 @@ and treat_binop e1 e2 destr destl binop =
   | Ptree.Bsub -> Ops.Msub
   | Ptree.Bmul -> Ops.Mmul
   | Ptree.Bdiv -> begin
-    if(e2.expr_typ = Ttree.Ttypenull) then raise_error "Division by zero"
-    else Ops.Mdiv
+    (*if(e2.expr_typ = Ttree.Ttypenull) then raise_error "Division by zero" else*)
+    Ops.Mdiv
   end;
   | _ -> raise_error "Should not come to this case (Badd/Band/Bor)" in
 
