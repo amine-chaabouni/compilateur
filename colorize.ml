@@ -1,4 +1,7 @@
+open Format
 exception Error of string
+
+let word_size = 8;;
 
 let raise_error  error =
   raise (Error error);;
@@ -33,18 +36,25 @@ let find_colorable_register (ig:Interference.igraph) todo colorization =
     (* Find a register with known colorized preference edge
       Loop over the preference sets see if already colorized *)
     let process_reg register =
+      let possible_colors = Register.M.find register colorization in
       let prefs = (Register.M.find register ig).prefs in
 
-      let check_if_colorized r =
-        if (Register.S.mem r Register.allocatable) then 
-          raise (Reg_Is_Colorable(register, r))
 
-        else if(not (Register.S.mem r todo)) then
+      let check_if_allocatable r =
+        if (Register.S.mem r Register.allocatable) then
+              if(Register.S.mem r possible_colors) then (*Make sure it is okay to choose this color*)
+                raise (Reg_Is_Colorable(register, r))
+      in
+      Register.S.iter check_if_allocatable prefs;
+
+      let check_if_colorized r =
+        if(not (Register.S.mem r todo)) then
           begin
             let color_set = Register.M.find r colorization in
             if(Register.S.cardinal color_set = 1) then
               let color =  Register.S.min_elt color_set in
-              raise (Reg_Is_Colorable(register, color))
+              if(Register.S.mem color possible_colors) then (*Make sure it is okay to choose this color*)
+                raise (Reg_Is_Colorable(register, color))
           end
       in
       Register.S.iter check_if_colorized prefs
@@ -52,7 +62,7 @@ let find_colorable_register (ig:Interference.igraph) todo colorization =
     Register.S.iter process_reg todo;
 
     (* No such registers found, so choose a random one*)
-    let random_colorizable_register register = 
+    let random_colorizable_register register =
       let potential_colors = Register.M.find register colorization in
       if not (Register.S.is_empty potential_colors) then
         raise (Reg_Is_Colorable (register, Register.S.min_elt potential_colors))
@@ -64,7 +74,7 @@ let find_colorable_register (ig:Interference.igraph) todo colorization =
   end
 
 let colorize (ig:Interference.igraph) =
-  let counter = ref 0 in
+  let counter = ref (-word_size) in
   let pseudo_registers = Seq.filter_map (function (r, _) -> if Register.is_pseudo r then Some r else None) (Register.M.to_seq ig) in 
   let todo = ref (Register.S.of_seq pseudo_registers) in
   let colorization = ref Register.M.empty in
@@ -86,24 +96,24 @@ let colorize (ig:Interference.igraph) =
       colorization := Register.M.add register (Register.S.singleton color) !colorization;
       (* Remove the register from todo *)
       todo := Register.S.remove register !todo;
-      (* Remove the color from all intereferences *)
+      (* Remove the color from all intereferences still in todo *)
       let intfs = (Register.M.find register ig).intfs in
       let remove_color_from_interference key color_set = 
-        if(Register.S.mem key intfs) then Register.S.remove color color_set else color_set
+        if(Register.S.mem key !todo && Register.S.mem key intfs) then Register.S.remove color color_set else color_set
       in
       colorization := Register.M.mapi remove_color_from_interference !colorization;
     end
     | No_Colorization register -> begin
       (* Spill register *)
       colorized := Register.M.add register (Ltltree.Spilled !counter) !colorized;
-      counter := !counter + 1;
+      counter := !counter - word_size;
       (* Remove register from todo *)
       todo := Register.S.remove register !todo;
     end
   done;
 
   (* Put spilled in map and return *)
-  !colorized, !counter;;
+  !colorized, !counter+word_size;;
 
 
 

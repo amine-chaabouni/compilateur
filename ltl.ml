@@ -21,8 +21,7 @@ let convert_instr colorization m label instr =
   (* Unchanged instructions *)
   | Ertltree.Eload(register1, integer, register2, label) -> begin
     let op1 = lookup colorization register1 and op2 = lookup colorization register2 in
-    if(op1 = op2 && integer = 0) then Ltltree.Egoto label
-    else match op1, op2 with
+    match op1, op2 with
     | Ltltree.Reg r1, Ltltree.Reg r2 -> 
       Ltltree.Eload(r1, integer, r2, label)
     | Ltltree.Reg r1, Ltltree.Spilled s2 ->
@@ -90,7 +89,7 @@ let convert_instr colorization m label instr =
   (* Alloc and delete frame *)
   | Ertltree.Ealloc_frame label -> begin
     let label_add = if m<>0 then
-      generate (Ltltree.Emunop(Ops.Maddi (Int32.of_int(-8*m)), Ltltree.Reg Register.rsp, label))
+      generate (Ltltree.Emunop(Ops.Maddi (Int32.of_int (m)), Ltltree.Reg Register.rsp, label))
     else label
     in
     let label_mov = generate (Ltltree.Embinop(Ops.Mmov, Ltltree.Reg Register.rsp, Ltltree.Reg Register.rbp, label_add)) in
@@ -114,16 +113,18 @@ let convert_instr colorization m label instr =
   end
   in associate label converted_instruction;;
 
-let convert_graph ertl_graph m =
+let convert_graph ertl_graph =
   let map_info = Ertltree.liveness ertl_graph in
   let igraph = Interference.make map_info in
-  let colorization, nb_spilled = Colorize.colorize igraph in
+  let colorization, m = Colorize.colorize igraph in
+  (*Interference.print_ig igraph;
+  Colorize.print_cm colorization;*)
   Label.M.iter (convert_instr colorization m) ertl_graph;;
 
 
 
 let convert_ertl (fun_def:Ertltree.deffun) =
-  convert_graph fun_def.fun_body (Register.S.cardinal fun_def.fun_locals);
+  convert_graph fun_def.fun_body;
 
   {
     fun_name = fun_def.fun_name;
