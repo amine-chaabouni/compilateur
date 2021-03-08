@@ -98,13 +98,13 @@ let rec expr e destr destl = match e with
     label_first_param
   end;
   | Ttree.Eaccess_field (e,f)-> begin
-    (*if(e.expr_typ = Ttree.Ttypenull) then raise_error "Segmentation fault : Null type can't be field accessed";*)
     (*print_string ("RTL Eaccess field : expression : " ^ Typing.string_of_type e.expr_typ ^ "\n");
     print_string ("RTL Eaccess field : field : " ^ Typing.string_of_type f.field_typ ^ "\n");*)
     (*let register_expression = Register.fresh() in*)
     let register_var = Register.fresh() in
     let label_field = generate (Rtltree.Eload(register_var, f.field_pos * wordsize, destr, destl)) in
-    let label_expression = expr e.expr_node register_var label_field in
+    let label_expression = if(e.expr_typ = Ttree.Ttypenull) then generate(Rtltree.Econst(zero_i32, register_var, label_field))
+    else expr e.expr_node register_var label_field in
     label_expression;
   end;
   | Ttree.Eassign_field (expl,f,e)-> begin
@@ -163,14 +163,14 @@ and treat_binop e1 e2 destr destl binop =
   | Ptree.Bsub -> Ops.Msub
   | Ptree.Bmul -> Ops.Mmul
   | Ptree.Bdiv -> begin
-    (*if(e2.expr_typ = Ttree.Ttypenull) then raise_error "Division by zero" else*)
     Ops.Mdiv
   end;
   | _ -> raise_error "Should not come to this case (Badd/Band/Bor)" in
 
   let instruction_binop =  Embinop(operation, reg_e2, destr, !label_next) in
   let label_binop = generate instruction_binop in
-  let label_put_e2 = expr e2.expr_node reg_e2 label_binop in
+  let label_put_e2 = if(e2.expr_typ = Ttree.Ttypenull) then generate (Rtltree.Econst(zero_i32, reg_e2, label_binop))
+  else expr e2.expr_node reg_e2 label_binop in
   let label_put_e1 = expr e1.expr_node destr label_put_e2 in
   label_put_e1
 
@@ -220,10 +220,45 @@ and condition_boolean_op binop (e1: Ttree.expr) (e2: Ttree.expr) truel falsel =
   | Ptree.Bge -> r1 := reg_e2; r2 := reg_e1; Ops.Mjle
   | _ -> raise_error "ha" in
   let instruction_branch = Embbranch(op, !r2, !r1, truel, falsel) in
-  let label_binop = generate instruction_branch in
-  let label_put_e2 = expr e2.expr_node reg_e2 label_binop in
+  let label_branch = generate instruction_branch in
+  let label_put_e2 = expr e2.expr_node reg_e2 label_branch in
   let label_put_e1 = expr e1.expr_node reg_e1 label_put_e2 in
   label_put_e1
+  (*
+  let immediate_op_r1 c = match binop with (*TODO: UNCOMPLETE*)
+  | Ptree.Blt -> Ops.Mjgi c
+  | Ptree.Ble -> Ops.Mjlei c
+  | Ptree.Bgt -> Ops.Mgi c
+  | Ptree.Bge -> Ops.Mjlei c
+  | _ -> raise_error "Treat_immediate : case should not exist"
+
+  let immediate_op_r2 c = match binop with
+  | Ptree.Blt -> Ops.Mjgi c
+  | Ptree.Ble -> Ops.Mjlei c
+  | Ptree.Bgt -> Ops.Mgi c
+  | Ptree.Bge -> Ops.Mjlei c
+  | _ -> raise_error "Treat_immediate : case should not exist"
+  in
+  match e1.expr_node, e2.expr_node with
+  | (_, Ttree.Econst c) -> begin
+    let instruction_addi =  Emubranch(immediate_op_r2 c, !r1, truel, falsel) in
+    let label_addi = generate instruction_addi in
+    let label_put_e1 = expr e1.expr_node destr label_addi in
+    label_put_e1
+  end
+  | (Ttree.Econst c, _) -> begin
+    let instruction_addi =  Emubranch(immediate_op_r1 c, !r2, truel, falsel) in
+    let label_addi = generate instruction_addi in
+    let label_put_e2 = expr e2.expr_node destr label_addi in
+    label_put_e2
+  end
+  | _ -> begin
+    let instruction_branch = Embbranch(op, !r2, !r1, truel, falsel) in
+    let label_branch = generate instruction_branch in
+    let label_put_e2 = expr e2.expr_node reg_e2 label_branch in
+    let label_put_e1 = expr e1.expr_node reg_e1 label_put_e2 in
+  end
+  *)
 
 and condition e truel falsel = match e with
   |Ttree.Ebinop (binop, e1, e2) -> (match binop with
