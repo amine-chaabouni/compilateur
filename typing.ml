@@ -393,27 +393,42 @@ and convert_stmt_node return_typ = function
     (*print_string "before Sdecl ";
     print_int (Stack.length variable_declarations);
     print_string "\n";*)
-    let _ = convert_decl_var_list dlist in
+    let vars = convert_decl_var_list dlist in
+    (*print_string "Sdecl ";
+    List.iter (fun (t,id) -> print_string (id ^" ")) vars;
+    print_string "\n";*)
     (*print_string "after Sdecl ";
     print_int (Stack.length variable_declarations);
     print_string "\n";*)
     Ttree.Sskip;
-  | Ptree.Sinit (x,e) -> raise_error e.expr_loc "Sinit not yet implemented"
-
+  | Ptree.Sinit (x,e) -> 
+    (*Convert right expression *)
+    let expression_type, converted_expression = convert_expr_node e.expr_node in
+    let expression = {expr_node = converted_expression; expr_typ = expression_type} in
+    (*Declare variables inside the same block*)
+    let _ = convert_decl_var_list x in
+    (*Return the expression*)
+    let decl_list = List.map (fun (t,(id:Ptree.ident)) -> (convert_type t, id.id)) x in
+    Ttree.Sexpr {expr_node = Ttree.Einit_local (decl_list,expression); expr_typ = expression_type}
 
 
 and convert_block return_typ stmt_list =
+  (*print_string "new block\n";*)
   (* Push blocks own hashtable *)
   let block_variables = Hashtbl.create 16 in
   Stack.push block_variables variable_declarations;
   let converted_stmt = convert_stmt_list return_typ stmt_list in
   (*Hashtbl.iter (fun key (t,n) -> print_string ("variable " ^ key ^" of type " ^ (string_of_type t) ^ "\n")) variable_list;*)
-  let block_variables = (try 
+  let _ = (try 
     Stack.pop variable_declarations
   with Stack.Empty -> raise (Error "Trying to pop from empty stack in treating block statement")) in
+  (*print_string "block popped\n";*)
   let variables = Hashtbl.to_seq block_variables in
   let seq_variables = Seq.map (fun (x, t) -> (t,x)) variables in
   let list_variables = List.rev(List.of_seq( seq_variables ))in
+  (*print_string "block containing ";
+  List.iter (fun (t,id) -> print_string (id ^" ")) list_variables;
+  print_string "\n";*)
   (list_variables,converted_stmt);;
 
 
