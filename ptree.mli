@@ -49,13 +49,15 @@ type stmt =
 and stmt_node =
   | Sskip
   | Sexpr of expr
+  | Sdecl of decl_var list
+  | Sinit of decl_var list * expr
   | Sif of expr * stmt * stmt
   | Swhile of expr * stmt
   | Sblock of block
   | Sreturn of expr
 
 and block =
-  decl_var list * stmt list
+  stmt list
 
 type decl_struct = ident * decl_var list
 

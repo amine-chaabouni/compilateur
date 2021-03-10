@@ -10,6 +10,10 @@ exception Error of string
 
 let structures = (Hashtbl.create 16 : (string, structure) Hashtbl.t);;
 let functions = (Hashtbl.create 16 : (string, (Ttree.typ * (Ttree.typ*string) list)) Hashtbl.t);;
+(*Stack containing variable declarations. LIFO. each element represent variables declared in last accessed block*)
+let variable_declarations = Stack.create();;
+
+
 
 (* Add two predefined functions : int putchar(int c) and void *sbrk(int n) *)
 Hashtbl.add functions "putchar" (Tint, (Tint, "c")::[]);;
@@ -85,6 +89,30 @@ let raise_other loc err typ =
   raise_error loc error;;
 
 
+
+exception Variable_found of Ttree.typ * string
+let find_variable x =
+  let aux (x:Ptree.ident) block_variable =
+    try
+      raise( Variable_found ( Hashtbl.find block_variable x.id , x.id ))
+    with Not_found -> ()
+  in
+  try
+    Stack.iter (aux x) variable_declarations;
+    raise_undeclared_variable x;
+  with Variable_found (t,x) -> (t,x);;
+
+exception Block_found of (string,Ttree.typ)Hashtbl.t
+let replace_var_type x new_type =
+  let aux (x:Ptree.ident) block_variable =
+    if(Hashtbl.mem block_variable x.id) then raise(Block_found block_variable)
+  in
+  try
+    Stack.iter (aux x) variable_declarations;
+    raise_undeclared_variable x;
+  with Block_found b -> Hashtbl.replace b x.id new_type;;
+
+
 let rec remove_variables variable_list = function
   | hd::tl ->  Hashtbl.remove variable_list hd; remove_variables variable_list tl;
   | [] -> ();;
@@ -127,22 +155,30 @@ let struct_aux ((identifier, list_of_members):Ptree.decl_struct) =
 ;;
 
 
-
-let rec convert_decl_var_list variable_list local_declarations (decl_list:Ptree.decl_var list) = 
-  match decl_list with
-  | hd::tl -> (begin 
-      let hd_typ, hd_ident = hd in
-      if(List.mem hd_ident.id local_declarations) then 
-        raise (Error ("Variable " ^ hd_ident.id ^ " already declared."))
-      else(
-        let local_declarations = hd_ident.id::local_declarations in
-        let converted_type = convert_type hd_typ in
-        Hashtbl.add variable_list hd_ident.id (converted_type, hd_ident.id);
-        let _, rest = convert_decl_var_list variable_list local_declarations tl in
-        local_declarations, (converted_type, hd_ident.id)::rest;
-      )
-    end)
-  | [] -> [],[];;
+let rec convert_decl_var_list (decl_list:Ptree.decl_var list) =
+  (* Retrieve block's hashtable *)
+  let local_declarations = try 
+    Stack.top variable_declarations
+  with Stack.Empty -> raise (Error "taking top stack in convert variable declaration") 
+  in
+  let args = [] in
+  let rec aux args (decl_list:Ptree.decl_var list) = 
+    match decl_list with
+    | hd::tl -> (begin 
+        let hd_typ, hd_ident = hd in
+        if(Hashtbl.mem local_declarations hd_ident.id) then 
+          raise (Error ("Variable " ^ hd_ident.id ^ " already declared."))
+        else(
+          let converted_type = convert_type hd_typ in
+          Hashtbl.add local_declarations hd_ident.id converted_type;
+          let rest = aux args tl in
+          (converted_type, hd_ident.id)::rest
+        )
+      end)
+    | [] -> []
+      (*Stack.push local_declarations variable_declarations*);
+  in 
+  aux args decl_list;
 ;;
 
 let rec get_var_name = function
@@ -151,20 +187,16 @@ let rec get_var_name = function
     | Ptree.Larrow (e,id) -> id.id;)
   | _ -> raise (Error "not a variable");;
 
-let rec convert_expr_node variable_list = function
+let rec convert_expr_node = function
   | Ptree.Econst cst -> if(cst = zero) then Ttypenull, Ttree.Econst cst else Tint, Ttree.Econst cst;
   (* Treat the case of calling a variable as a right member*)
   | Ptree.Eright rval -> (match rval with
     | Ptree.Lident lid-> begin 
-        let saved_typ , saved_ident = try
-          Hashtbl.find variable_list lid.id
-        with Not_found -> raise_undeclared_variable lid
-          (*raise_undeclared_variable lid*) in
-        
+        let saved_typ , saved_ident = find_variable lid in
         saved_typ, Ttree.Eaccess_local lid.id;
       end
     | Ptree.Larrow (lar,field) -> begin
-        let lar_typ, lar_node = convert_expr_node variable_list lar.expr_node in
+        let lar_typ, lar_node = convert_expr_node lar.expr_node in
         (* Take care of the case 0->field / typenull->field *)
         if(lar_typ = Ttree.Ttypenull) then 
         lar_typ, Ttree.Eaccess_field({expr_node=lar_node; expr_typ=lar_typ}, {field_name = field.id; field_typ = lar_typ; field_pos = 0})
@@ -175,9 +207,7 @@ let rec convert_expr_node variable_list = function
         let var_typ, var_name = (match lar_node with
           | Eaccess_field (e,f) -> lar_typ, variable_name
           | Eaccess_local id -> begin 
-              try
-                Hashtbl.find variable_list variable_name
-              with Not_found ->  raise_undeclared_variable {id=variable_name; id_loc=lar.expr_loc}
+              find_variable {id=variable_name; id_loc=lar.expr_loc}
             end
           | _ -> raise (Error "Some other type of access that is not yet implemented. Should not exist.")
         ) in
@@ -198,16 +228,14 @@ let rec convert_expr_node variable_list = function
   (* Treat the case of assigning to the variable *)
   | Ptree.Eassign (lval,e) -> (match lval with
     | Ptree.Lident lid-> begin 
-      let saved_typ , saved_ident = try
-        Hashtbl.find variable_list lid.id
-      with Not_found -> raise_undeclared_variable lid in
+      let saved_typ , saved_ident = find_variable lid in
 
-      let e_typ, e_node = convert_expr_node variable_list e.expr_node in
+      let e_typ, e_node = convert_expr_node e.expr_node in
       if(compare_typ saved_typ e_typ) then( (*Make sure the types are consistant*)
         (*print_string ("Typing : " ^ lid.id ^ " was : " ^ (string_of_type saved_typ) ^ " \n");*)
         if(e_typ = Ttypenull) then
           begin
-            Hashtbl.replace variable_list lid.id (e_typ, lid.id);
+            replace_var_type lid e_typ;
             (*print_string ("Typing : " ^ lid.id ^ " is : " ^ (string_of_type e_typ) ^ " \n");*)
           end;
         saved_typ, Ttree.Eassign_local (lid.id,{expr_node = e_node; expr_typ = e_typ})
@@ -215,16 +243,12 @@ let rec convert_expr_node variable_list = function
       else raise_unconsistant lid.id_loc saved_typ e_typ;
     end
     | Ptree.Larrow (lar,field) -> begin
-      let lar_typ, lar_node = convert_expr_node variable_list lar.expr_node in
+      let lar_typ, lar_node = convert_expr_node lar.expr_node in
       let variable_name = get_var_name lar.expr_node in
 
       let var_typ, var_name = (match lar_node with
           | Eaccess_field (e,f) -> lar_typ, variable_name
-          | Eaccess_local id -> begin 
-              try
-                Hashtbl.find variable_list variable_name
-              with Not_found ->  raise_undeclared_variable {id=variable_name; id_loc=lar.expr_loc}
-            end
+          | Eaccess_local id -> find_variable {id=variable_name; id_loc=lar.expr_loc}
           | _ -> raise (Error "Some other type of access that is not yet implemented. Should not exist.")
         ) in
       
@@ -238,7 +262,7 @@ let rec convert_expr_node variable_list = function
         Hashtbl.find str_fields field.id 
       with Not_found -> raise_undeclared_field field in
 
-      let e_typ, e_node = convert_expr_node variable_list e.expr_node in
+      let e_typ, e_node = convert_expr_node e.expr_node in
       if(compare_typ called_field.field_typ e_typ) then (*Make sure the types are consistant*)
         called_field.field_typ, Ttree.Eassign_field({expr_node=lar_node; expr_typ=lar_typ}, called_field, {expr_node = e_node; expr_typ = e_typ})
       else raise_unconsistant lar.expr_loc lar_typ e_typ;
@@ -247,12 +271,12 @@ let rec convert_expr_node variable_list = function
   | Ptree.Eunop (nop, e) -> (match nop with
     (* nop is ! , then if e is well typed, !e is of type int*)
     | Unot -> begin
-        let e_typ, e_node = convert_expr_node variable_list e.expr_node in
+        let e_typ, e_node = convert_expr_node e.expr_node in
         Tint, Ttree.Eunop (nop,{expr_node= e_node; expr_typ= Tint});
       end
     (* nop is - , then if e is of type int, the expression is well typed *)
     | Uminus -> begin
-        let e_typ, e_node = convert_expr_node variable_list e.expr_node in
+        let e_typ, e_node = convert_expr_node e.expr_node in
         if(compare_typ e_typ Tint) then
           Tint, Ttree.Eunop (nop,{expr_node= e_node; expr_typ= Tint})
         else raise_other  e.expr_loc "Can't apply - operator to type " e_typ
@@ -260,10 +284,10 @@ let rec convert_expr_node variable_list = function
   )
   
   (* Treat operations between two expressions *)
-  | Ptree.Ebinop (binop, e1, e2) -> treat_binop variable_list binop e1 e2;
+  | Ptree.Ebinop (binop, e1, e2) -> treat_binop binop e1 e2;
 
   (* Treat function calls *)
-  | Ptree.Ecall (f, e_list) -> treat_call variable_list f e_list;
+  | Ptree.Ecall (f, e_list) -> treat_call f e_list;
   
   | Ptree.Esizeof str -> (begin
       let structure_identifier = "struct " ^ str.id ^ " *" in
@@ -273,25 +297,25 @@ let rec convert_expr_node variable_list = function
       Tint, Ttree.Esizeof called_structure;
     end)
   
-and treat_binop variable_list binop e1 e2 = match binop with
+and treat_binop binop e1 e2 = match binop with
   (* convert expressions and see if they are compatible*)
   | Beq | Bneq | Blt | Ble | Bgt | Bge -> begin
-      let e1_typ, e1_node = convert_expr_node variable_list e1.expr_node and e2_typ, e2_node = convert_expr_node variable_list e2.expr_node in
+      let e1_typ, e1_node = convert_expr_node e1.expr_node and e2_typ, e2_node = convert_expr_node e2.expr_node in
       if (compare_typ e1_typ e2_typ) then
         Tint, Ttree.Ebinop (binop, {expr_node= e1_node; expr_typ= e1_typ}, {expr_node= e2_node; expr_typ= e2_typ})
       else raise_unconsistant e1.expr_loc e1_typ e2_typ
     end
 
-  | Badd | Bsub | Bmul | Bdiv -> treat_arithmetic variable_list e1 e2 binop
+  | Badd | Bsub | Bmul | Bdiv -> treat_arithmetic e1 e2 binop
 
   | Band | Bor -> begin
       (* Bonus : compatibility unecessary *)
-      let e1_typ, e1_node = convert_expr_node variable_list e1.expr_node and e2_typ, e2_node = convert_expr_node variable_list e2.expr_node in
+      let e1_typ, e1_node = convert_expr_node e1.expr_node and e2_typ, e2_node = convert_expr_node e2.expr_node in
       Tint, Ttree.Ebinop (binop, {expr_node= e1_node; expr_typ= e1_typ}, {expr_node= e2_node; expr_typ= e2_typ})
     end
 
-and treat_arithmetic variable_list e1 e2 binop = 
-  let e1_typ, e1_node = convert_expr_node variable_list e1.expr_node and e2_typ, e2_node = convert_expr_node variable_list e2.expr_node in
+and treat_arithmetic e1 e2 binop = 
+  let e1_typ, e1_node = convert_expr_node e1.expr_node and e2_typ, e2_node = convert_expr_node e2.expr_node in
   if (compare_typ e1_typ Tint && compare_typ e2_typ Tint) then
       let return_type = match binop with
       (* Treat the case 0*x, 0/x and x/0 by indicating that the return type is typenull *)  
@@ -304,7 +328,7 @@ and treat_arithmetic variable_list e1 e2 binop =
       return_type, Ttree.Ebinop (binop, {expr_node= e1_node; expr_typ= e1_typ}, {expr_node= e2_node; expr_typ= e2_typ})
   else raise_unconsistant e1.expr_loc e1_typ e2_typ
 
-and treat_call variable_list f e_list =
+and treat_call f e_list =
   let return_typ, args   = try 
     Hashtbl.find functions f.id
   with Not_found -> raise_undeclared_function f in
@@ -315,7 +339,7 @@ and treat_call variable_list f e_list =
     | [], _ -> raise (Error "too many arguments");
     | _, [] -> raise (Error "not enough arguments");
     | hd::tl, e_hd::e_tl -> begin
-      let e_typ, e_node = convert_expr_node variable_list e_hd.expr_node
+      let e_typ, e_node = convert_expr_node e_hd.expr_node
       and arg_typ, arg_id = hd in
       if(compare_typ arg_typ e_typ) then
         {expr_node=e_node; expr_typ=e_typ}::(compare_args tl e_tl)
@@ -327,81 +351,117 @@ and treat_call variable_list f e_list =
 
 
 
-let rec convert_stmt_list variable_list return_typ (stmt_list:Ptree.stmt list) = match stmt_list with
-  | hd::tl -> let node = convert_stmt variable_list return_typ hd in node::(convert_stmt_list variable_list return_typ tl)
+let rec convert_stmt_list return_typ (stmt_list:Ptree.stmt list) = match stmt_list with
+  | hd::tl -> let node = convert_stmt return_typ hd in node::(convert_stmt_list return_typ tl)
   | [] -> [];
   
-and convert_stmt variable_list return_typ (s:Ptree.stmt) = 
-  convert_stmt_node variable_list return_typ s.stmt_node
+and convert_stmt return_typ (s:Ptree.stmt) = 
+  convert_stmt_node return_typ s.stmt_node
 
   
-and convert_stmt_node variable_list return_typ = function 
 (* return value : the return type and the statement *)
+and convert_stmt_node return_typ = function
   | Ptree.Sskip -> Ttree.Sskip
   | Ptree.Sexpr e -> begin
-      let e_typ, e_node = convert_expr_node variable_list e.expr_node in
+      let e_typ, e_node = convert_expr_node e.expr_node in
       Ttree.Sexpr {expr_node = e_node; expr_typ = e_typ};
     end
   | Ptree.Sif (e, s1, s2) -> begin
-      let e_typ, e_node = convert_expr_node variable_list e.expr_node in
-      let converted_s1 = convert_stmt variable_list return_typ s1 in
-      let converted_s2 = convert_stmt variable_list return_typ s2 in
+      let e_typ, e_node = convert_expr_node e.expr_node in
+      let converted_s1 = convert_stmt return_typ s1 in
+      let converted_s2 = convert_stmt return_typ s2 in
       Ttree.Sif({expr_node=e_node; expr_typ=e_typ}, converted_s1, converted_s2)
     end
   | Ptree.Swhile (e, s) -> begin
-      let e_typ, e_node = convert_expr_node variable_list e.expr_node in
-      let converted_s = convert_stmt variable_list return_typ s in
+      let e_typ, e_node = convert_expr_node e.expr_node in
+      let converted_s = convert_stmt return_typ s in
       Ttree.Swhile({expr_node=e_node; expr_typ=e_typ}, converted_s);
     end
   | Ptree.Sblock b -> begin
-      let converted_block = convert_block variable_list return_typ b in
+      let converted_block = convert_block return_typ b in
       Ttree.Sblock converted_block;
     end
 
   | Ptree.Sreturn e -> begin
-    let e_typ, e_node = convert_expr_node variable_list e.expr_node in
+    let e_typ, e_node = convert_expr_node e.expr_node in
     if(compare_typ e_typ return_typ) then
       Ttree.Sreturn {expr_node = e_node; expr_typ = e_typ}
     else  raise_unconsistant e.expr_loc e_typ return_typ;
   end
 
+  | Ptree.Sdecl (dlist) -> 
+    (*print_string "before Sdecl ";
+    print_int (Stack.length variable_declarations);
+    print_string "\n";*)
+    let vars = convert_decl_var_list dlist in
+    (*print_string "Sdecl ";
+    List.iter (fun (t,id) -> print_string (id ^" ")) vars;
+    print_string "\n";*)
+    (*print_string "after Sdecl ";
+    print_int (Stack.length variable_declarations);
+    print_string "\n";*)
+    Ttree.Sskip;
+  | Ptree.Sinit (x,e) -> 
+    (*Convert right expression *)
+    let expression_type, converted_expression = convert_expr_node e.expr_node in
+    let expression = {expr_node = converted_expression; expr_typ = expression_type} in
+    (*Declare variables inside the same block*)
+    let _ = convert_decl_var_list x in
+    (*Return the expression*)
+    let decl_list = List.map (fun (t,(id:Ptree.ident)) -> (convert_type t, id.id)) x in
+    Ttree.Sexpr {expr_node = Ttree.Einit_local (decl_list,expression); expr_typ = expression_type}
 
 
-and convert_block variable_list return_typ (decl_list,stmt_list) = 
-  let local_declarations = [] in
-  let local_declarations, converted_var = convert_decl_var_list variable_list local_declarations decl_list
-  and converted_stmt = convert_stmt_list variable_list return_typ stmt_list in
+and convert_block return_typ stmt_list =
+  (*print_string "new block\n";*)
+  (* Push blocks own hashtable *)
+  let block_variables = Hashtbl.create 16 in
+  Stack.push block_variables variable_declarations;
+  let converted_stmt = convert_stmt_list return_typ stmt_list in
   (*Hashtbl.iter (fun key (t,n) -> print_string ("variable " ^ key ^" of type " ^ (string_of_type t) ^ "\n")) variable_list;*)
-  remove_variables variable_list local_declarations;
-  (converted_var,converted_stmt);;
+  let _ = (try 
+    Stack.pop variable_declarations
+  with Stack.Empty -> raise (Error "Trying to pop from empty stack in treating block statement")) in
+  (*print_string "block popped\n";*)
+  let variables = Hashtbl.to_seq block_variables in
+  let seq_variables = Seq.map (fun (x, t) -> (t,x)) variables in
+  let list_variables = List.rev(List.of_seq( seq_variables ))in
+  (*print_string "block containing ";
+  List.iter (fun (t,id) -> print_string (id ^" ")) list_variables;
+  print_string "\n";*)
+  (list_variables,converted_stmt);;
 
 
 
-let treat_body variable_list fun_body converted_typ name args =
+let treat_body fun_body converted_typ name args =
+  (*print_string "treating body ";
+  print_int (Stack.length variable_declarations);
+  print_string "\n";*)
+  let converted_block = convert_block converted_typ fun_body in
+  let _ = (try 
+    Stack.pop variable_declarations
+  with Stack.Empty -> raise (Error "Trying pop function formals")) in
+  assert(Stack.length variable_declarations = 0);
   {
     fun_typ    = converted_typ;
     fun_name   = name;
     fun_formals= args;
-    fun_body   = convert_block variable_list converted_typ fun_body
+    fun_body   = converted_block
   } ;;
 
 let fun_aux  (fn:Ptree.decl_fun) =
 
-  (* A table to store the variables declared inside a block *)
-  let variable_list = (Hashtbl.create 10 : (string, Ttree.decl_var) Hashtbl.t) in
-  let local_declarations = [] in
-
-  let converted_typ = convert_type fn.fun_typ and name = fn.fun_name.id
-  and _, args = convert_decl_var_list variable_list local_declarations fn.fun_formals in
+  let converted_typ = convert_type fn.fun_typ and name = fn.fun_name.id in
+  (* Push formals' own hashtable *)
+  let formal_declaration = Hashtbl.create 16 in
+  Stack.push formal_declaration variable_declarations;
+  let args = convert_decl_var_list fn.fun_formals in
 
   if(Hashtbl.mem functions name) then
     raise (Error ("Function " ^ name ^ " already declared"))
   else
     Hashtbl.add functions name (converted_typ,args);
-  (*raise (Error ("adding function " ^ name));*)
-  (* The definition of the functions start from bottom to top. This is weird. *)
-
-  treat_body variable_list fn.fun_body converted_typ name args;;
+  treat_body fn.fun_body converted_typ name args;;
 
 
 

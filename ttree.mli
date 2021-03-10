@@ -39,6 +39,7 @@ and expr_node =
   | Eaccess_field of expr * field
   | Eassign_local of ident * expr
   | Eassign_field of expr * field * expr
+  | Einit_local of decl_var list * expr
   | Eunop of unop * expr
   | Ebinop of binop * expr * expr
   | Ecall of ident * expr list
