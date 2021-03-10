@@ -26,7 +26,7 @@ let associate_register id =
   with Not_found -> ()
   in try
     Stack.iter aux var_to_reg;
-    raise_error ("Undefined variable" ^ id);
+    raise_error ("Undefined variable " ^ id);
   with Register_Found x -> x;;
 
 let graph = ref Label.M.empty
@@ -305,7 +305,7 @@ let rec stmt s destl retr exitl local_reg = match s with
       in let result = treat_block destl (List.rev stmt_list) in
       let _ = (try 
         Stack.pop var_to_reg
-      with Stack.Empty -> raise_error "message plus clair") in
+      with Stack.Empty -> raise_error "Trying to pop from empty stack in treating block statement") in
       result;
     end
   | Ttree.Sexpr e -> let converted_e = expr e.expr_node retr destl in converted_e;
@@ -349,7 +349,7 @@ let deffun (fun_definition:Ttree.decl_fun) =
   let entryl = stmt (Ttree.Sblock fun_definition.fun_body) exitl retr exitl local_reg in
   let _  = (try 
     Stack.pop var_to_reg
-  with Stack.Empty -> raise_error "message plus clair 2") in
+  with Stack.Empty -> raise_error "Trying to pop from an empty stack. In deffun") in
   {
     fun_name = name;
     fun_formals = fun_formals;

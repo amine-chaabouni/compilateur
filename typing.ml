@@ -379,20 +379,21 @@ and convert_stmt_node return_typ = function
     else  raise_unconsistant e.expr_loc e_typ return_typ;
   end
 
-  (*| Ptree.Sdecl (dlist) -> raise(Error "Sdecl not yet implemented")
-  | Ptree.Sinit (x,e) -> raise_error e.expr_loc "Sinit not yet implemented"*)
+  | Ptree.Sdecl (dlist) -> raise(Error "Sdecl not yet implemented")
+  | Ptree.Sinit (x,e) -> raise_error e.expr_loc "Sinit not yet implemented"
 
 
 
-and convert_block return_typ (decl_list,stmt_list) = 
-  let local_declarations = Hashtbl.create 16 in
-  let converted_var = convert_decl_var_list local_declarations decl_list in
+and convert_block return_typ stmt_list = 
   let converted_stmt = convert_stmt_list return_typ stmt_list in
   (*Hashtbl.iter (fun key (t,n) -> print_string ("variable " ^ key ^" of type " ^ (string_of_type t) ^ "\n")) variable_list;*)
-  let _ = (try 
+  let block_variables = (try 
     Stack.pop variable_declarations
   with Stack.Empty -> raise (Error "Trying to pop from empty stack in treating block statement")) in
-  (converted_var,converted_stmt);;
+  let variables = Hashtbl.to_seq block_variables in
+  let seq_variables = Seq.map (fun (x, t) -> (t,x)) variables in
+  let list_variables = List.of_seq( seq_variables )in
+  (list_variables,converted_stmt);;
 
 
 
