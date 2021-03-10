@@ -158,7 +158,7 @@ let rec convert_expr_node variable_list = function
     | Ptree.Lident lid-> begin 
         let saved_typ , saved_ident = try
           Hashtbl.find variable_list lid.id
-        with Not_found -> raise (Error "here")
+        with Not_found -> raise_undeclared_variable lid
           (*raise_undeclared_variable lid*) in
         
         saved_typ, Ttree.Eaccess_local lid.id;
