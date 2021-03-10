@@ -155,20 +155,30 @@ let struct_aux ((identifier, list_of_members):Ptree.decl_struct) =
 ;;
 
 
-let rec convert_decl_var_list local_declarations (decl_list:Ptree.decl_var list) = 
-  match decl_list with
-  | hd::tl -> (begin 
-      let hd_typ, hd_ident = hd in
-      if(Hashtbl.mem local_declarations hd_ident.id) then 
-        raise (Error ("Variable " ^ hd_ident.id ^ " already declared."))
-      else(
-        let converted_type = convert_type hd_typ in
-        Hashtbl.add local_declarations hd_ident.id converted_type;
-        let rest = convert_decl_var_list local_declarations tl in
-        (converted_type, hd_ident.id)::rest;
-      )
-    end)
-  | [] -> Stack.push local_declarations variable_declarations; [];;
+let rec convert_decl_var_list (decl_list:Ptree.decl_var list) =
+  (* Retrieve block's hashtable *)
+  let local_declarations = try 
+    Stack.top variable_declarations
+  with Stack.Empty -> raise (Error "taking top stack in convert variable declaration") 
+  in
+  let args = [] in
+  let rec aux args (decl_list:Ptree.decl_var list) = 
+    match decl_list with
+    | hd::tl -> (begin 
+        let hd_typ, hd_ident = hd in
+        if(Hashtbl.mem local_declarations hd_ident.id) then 
+          raise (Error ("Variable " ^ hd_ident.id ^ " already declared."))
+        else(
+          let converted_type = convert_type hd_typ in
+          Hashtbl.add local_declarations hd_ident.id converted_type;
+          let rest = aux args tl in
+          (converted_type, hd_ident.id)::rest
+        )
+      end)
+    | [] -> []
+      (*Stack.push local_declarations variable_declarations*);
+  in 
+  aux args decl_list;
 ;;
 
 let rec get_var_name = function
@@ -342,7 +352,7 @@ and treat_call f e_list =
 
 
 let rec convert_stmt_list return_typ (stmt_list:Ptree.stmt list) = match stmt_list with
-  | hd::tl -> let node = convert_stmt  return_typ hd in node::(convert_stmt_list return_typ tl)
+  | hd::tl -> let node = convert_stmt return_typ hd in node::(convert_stmt_list return_typ tl)
   | [] -> [];
   
 and convert_stmt return_typ (s:Ptree.stmt) = 
@@ -379,12 +389,23 @@ and convert_stmt_node return_typ = function
     else  raise_unconsistant e.expr_loc e_typ return_typ;
   end
 
-  | Ptree.Sdecl (dlist) -> raise(Error "Sdecl not yet implemented")
+  | Ptree.Sdecl (dlist) -> 
+    (*print_string "before Sdecl ";
+    print_int (Stack.length variable_declarations);
+    print_string "\n";*)
+    let _ = convert_decl_var_list dlist in
+    (*print_string "after Sdecl ";
+    print_int (Stack.length variable_declarations);
+    print_string "\n";*)
+    Ttree.Sskip;
   | Ptree.Sinit (x,e) -> raise_error e.expr_loc "Sinit not yet implemented"
 
 
 
-and convert_block return_typ stmt_list = 
+and convert_block return_typ stmt_list =
+  (* Push blocks own hashtable *)
+  let block_variables = Hashtbl.create 16 in
+  Stack.push block_variables variable_declarations;
   let converted_stmt = convert_stmt_list return_typ stmt_list in
   (*Hashtbl.iter (fun key (t,n) -> print_string ("variable " ^ key ^" of type " ^ (string_of_type t) ^ "\n")) variable_list;*)
   let block_variables = (try 
@@ -392,16 +413,20 @@ and convert_block return_typ stmt_list =
   with Stack.Empty -> raise (Error "Trying to pop from empty stack in treating block statement")) in
   let variables = Hashtbl.to_seq block_variables in
   let seq_variables = Seq.map (fun (x, t) -> (t,x)) variables in
-  let list_variables = List.of_seq( seq_variables )in
+  let list_variables = List.rev(List.of_seq( seq_variables ))in
   (list_variables,converted_stmt);;
 
 
 
 let treat_body fun_body converted_typ name args =
+  (*print_string "treating body ";
+  print_int (Stack.length variable_declarations);
+  print_string "\n";*)
   let converted_block = convert_block converted_typ fun_body in
   let _ = (try 
     Stack.pop variable_declarations
-  with Stack.Empty -> raise (Error "Trying to pop from empty stack in treating body")) in
+  with Stack.Empty -> raise (Error "Trying pop function formals")) in
+  assert(Stack.length variable_declarations = 0);
   {
     fun_typ    = converted_typ;
     fun_name   = name;
@@ -411,19 +436,16 @@ let treat_body fun_body converted_typ name args =
 
 let fun_aux  (fn:Ptree.decl_fun) =
 
-  (* A table to store the variables declared inside a block *)
-  let local_declarations = Hashtbl.create 16 in
-
-  let converted_typ = convert_type fn.fun_typ and name = fn.fun_name.id
-  and args = convert_decl_var_list local_declarations fn.fun_formals in
+  let converted_typ = convert_type fn.fun_typ and name = fn.fun_name.id in
+  (* Push formals' own hashtable *)
+  let formal_declaration = Hashtbl.create 16 in
+  Stack.push formal_declaration variable_declarations;
+  let args = convert_decl_var_list fn.fun_formals in
 
   if(Hashtbl.mem functions name) then
     raise (Error ("Function " ^ name ^ " already declared"))
   else
     Hashtbl.add functions name (converted_typ,args);
-  (*raise (Error ("adding function " ^ name));*)
-  (* The definition of the functions start from bottom to top. This is weird. *)
-
   treat_body fn.fun_body converted_typ name args;;
 
 

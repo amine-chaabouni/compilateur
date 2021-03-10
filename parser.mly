@@ -40,9 +40,6 @@
 %nonassoc prec_then
 %nonassoc ELSE
 
-%nonassoc prec_assign
-%nonassoc SEMICOLON
-
 %right EQ
 %left VERTICALBARVERTICALBAR /* || */
 %left AMPERSANDAMPERSAND     /* && */
@@ -65,15 +62,17 @@ file:
 ;
 
 decl:
-| STRUCT s = ident LBRACE fl = list(decl_var_opt) RBRACE SEMICOLON
+| STRUCT s = ident LBRACE fl = list(terminated(decl_var_opt, SEMICOLON)) RBRACE SEMICOLON
     { Dstruct (s, List.flatten fl) }
 | f = decl_fun
     { Dfun f }
 ;
 
-decl_var:
-| decl_var_opt SEMICOLON
-    { $1 }
+decl_var_opt:
+| /*LONG*/ INT vl = separated_nonempty_list(COMMA, ident)
+    { List.map (fun x -> (Tint, x)) vl }
+| STRUCT s = ident vl = separated_nonempty_list(COMMA, star_ident)
+    { let ty = Tstructp s in List.map (fun x -> (ty, x)) vl }
 ;
 
 star_ident:
@@ -113,7 +112,7 @@ expr:
 expr_node:
 | lvalue
     { Eright $1 }
-| lvalue EQ expr %prec prec_assign
+| lvalue EQ expr
     { Eassign ($1, $3) }
 | expr VERTICALBARVERTICALBAR expr
     { Ebinop (Bor, $1, $3) }
@@ -169,13 +168,6 @@ stmt_node:
    { Sblock $1 }
 | RETURN expr SEMICOLON
    { Sreturn $2 }
-;
-
-decl_var_opt:
-| /*LONG*/ INT vl = separated_nonempty_list(COMMA, ident)
-    { List.map (fun x -> (Tint, x)) vl }
-| STRUCT s = ident vl = separated_nonempty_list(COMMA, star_ident)
-    { let ty = Tstructp s in List.map (fun x -> (ty, x)) vl }
 ;
 
 
