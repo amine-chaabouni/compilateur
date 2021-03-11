@@ -64,10 +64,10 @@ let convert_instr colorization m label instr =
   | Ertltree.Emunop (munop, register, label) -> Ltltree.Emunop(munop, lookup colorization register, label)
   | Ertltree.Embinop (binop, register1, register2, label) -> begin 
     let operand1 = lookup colorization register1 and operand2 = lookup colorization register2 in
+    (* In case the instruction is mov %rax %rax, just ignore it and go to the next instruction *)
     if(binop = Ops.Mmov && operand1 = operand2) then Ltltree.Egoto label
     else
     match binop with
-    (* In case the instruction is mov %rax %rax, just ignore it and go to the next instruction *)
     | Ops.Mmul -> begin
       match operand2 with
       | Ltltree.Reg r2 -> Ltltree.Embinop(Ops.Mmul, operand1, Ltltree.Reg r2, label)
@@ -122,8 +122,6 @@ let convert_graph ertl_graph =
   let map_info = Ertltree.liveness ertl_graph in
   let igraph = Interference.make map_info in
   let colorization, m = Colorize.colorize igraph in
-  (*Interference.print_ig igraph;
-  Colorize.print_cm colorization;*)
   Label.M.iter (convert_instr colorization m) ertl_graph;;
 
 

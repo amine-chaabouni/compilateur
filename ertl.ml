@@ -23,8 +23,8 @@ let associate l i =
 let rec convert_instr fun_name exit_label entry_label formal_regs label (rtl_instr:Rtltree.instr) =
   let ertl_instr = match rtl_instr with
   | Econst (n, r, l) -> Econst(n, r, l)
-  | Eload (r1, n, r2, l) -> assert(n mod word_size ==0); Eload (r1, n, r2, l)
-  | Estore (r1, r2, n, l) -> assert(n mod word_size ==0); Estore (r1, r2, n, l)
+  | Eload (r1, n, r2, l) -> assert(n mod word_size == 0); Eload (r1, n, r2, l)
+  | Estore (r1, r2, n, l) -> assert(n mod word_size == 0); Estore (r1, r2, n, l)
   | Emunop (munop, r, l) -> Emunop (munop, r, l)
   | Embinop (binop, r1, r2, l) -> begin
     match binop with 
@@ -53,7 +53,7 @@ and treat_call r id fun_name r_list l exit_label entry_label formal_regs=
   let k = min nb_args 6 in
 
   if (l<>exit_label || id <> fun_name) then
-    (* Deplier les arguments mis sur la pile *)
+    (* Unfold the arguments on the stack *)
     let unfold_params label register =
       index_param := !index_param+1;
       if(!index_param < k) then

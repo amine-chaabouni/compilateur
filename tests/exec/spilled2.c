@@ -10,8 +10,7 @@ struct S {
     int i21;
 };
 
-int f(int i1, int i2, int i3, int i4, int i5, int i6, int i7, int i8) {
-  int i9;
+int f(int i1, int i2, int i3, int i4, int i5, int i6, int i7, int i8, int i9) {
   int i10;
   int i11;
   struct S* i;
@@ -26,7 +25,6 @@ int f(int i1, int i2, int i3, int i4, int i5, int i6, int i7, int i8) {
   i->i19 = 19;
   i->i20 = 20;
   i->i21 = 21;
-  i9 = 9;
   i10 = 10;
   i11 = 11;
   i12 = 12;
@@ -43,13 +41,13 @@ int f(int i1, int i2, int i3, int i4, int i5, int i6, int i7, int i8) {
 }
 
 int main() {
-  f(1, 2, 3, 4, 5, 6, 7, 8);
-  f(1, 1, 1, 1, 1, 1, 1, 1);
-  f(2, 2, 2, 2, 2, 2, 2, 2);
-  f(8, 1, 2, 3, 4, 5, 6, 7);
-  f(1, 6, 5, 4, 3, 2, 1, 8);
-  f(-1, -2, -3, -4, -5, -6, -7, -8);
-  f(1, -2, 3, -4, 5, -6, 7, -8);
+  f(1, 2, 3, 4, 5, 6, 7, 8, 9);
+  f(1, 1, 1, 1, 1, 1, 1, 1, 9);
+  f(2, 2, 2, 2, 2, 2, 2, 2, 9);
+  f(8, 1, 2, 3, 4, 5, 6, 7, 9);
+  f(1, 6, 5, 4, 3, 2, 1, 8, 9);
+  f(-1, -2, -3, -4, -5, -6, -7, -8, 9);
+  f(1, -2, 3, -4, 5, -6, 7, -8, 9);
   putchar('\n');
   return 0;
 }
