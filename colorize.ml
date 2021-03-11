@@ -77,7 +77,7 @@ let find_colorable_register (ig:Interference.igraph) todo colorization =
   end
 
 let colorize (ig:Interference.igraph) =
-  let counter = ref (-word_size) in
+  let counter = ref 0 in
   let pseudo_registers = Seq.filter_map (function (r, _) -> if Register.is_pseudo r then Some r else None) (Register.M.to_seq ig) in 
   let todo = ref (Register.S.of_seq pseudo_registers) in
   let colorization = ref Register.M.empty in
@@ -108,15 +108,14 @@ let colorize (ig:Interference.igraph) =
     end
     | No_Colorization register -> begin
       (* Spill register *)
+      counter := (!counter) - word_size;
       colorized := Register.M.add register (Ltltree.Spilled !counter) !colorized;
-      counter := !counter - word_size;
       (* Remove register from todo *)
       todo := Register.S.remove register !todo;
     end
   done;
 
-  (* Put spilled in map and return *)
-  !colorized, !counter+word_size;;
+  !colorized, (!counter);;
 
 
 
