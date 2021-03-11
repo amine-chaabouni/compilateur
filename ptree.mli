@@ -30,6 +30,7 @@ and expr_node =
   | Ebinop of binop * expr * expr
   | Ecall of ident * expr list
   | Esizeof of ident
+  | Enone (* Escape option *)
 
 (** Une valeur gauche (en anglais, left value), c'est-à-dire une expression
     pouvant apparaître à gauche d'une affectation.
@@ -56,6 +57,7 @@ and stmt_node =
   | Sblock of block
   | Sreturn of expr
 
+(* The block only contains statements. Declarations are statements *)
 and block =
   stmt list
 

@@ -68,6 +68,7 @@ decl:
     { Dfun f }
 ;
 
+(* Not a real decl_var. This is just the beggining of the declaration, without the semicolons *)
 decl_var_opt:
 | /*LONG*/ INT vl = separated_nonempty_list(COMMA, ident)
     { List.map (fun x -> (Tint, x)) vl }
@@ -154,8 +155,10 @@ stmt_node:
    { Sskip }
 | expr SEMICOLON
    { Sexpr $1 }
+   (* Variable declaration *)
 | vl = decl_var_opt SEMICOLON
    { Sdecl vl }
+   (* Variable initialization *)
 | vl = decl_var_opt EQ expr SEMICOLON
    { Sinit (vl,$3) }
 | IF LPAR expr RPAR stmt %prec prec_then
@@ -169,7 +172,6 @@ stmt_node:
 | RETURN expr SEMICOLON
    { Sreturn $2 }
 ;
-
 
 block:
 | LBRACE sl = list(stmt) RBRACE { sl }

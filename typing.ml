@@ -62,6 +62,11 @@ let raise_error (loc:Ptree.loc) error =
     ^ "      " ^ error)
   );;
 
+
+let raise_previously_declared_variable (x:Ptree.ident) =
+  let error = "Variable " ^ x.id ^ " already declared" in
+  raise_error x.id_loc error;;
+
 let raise_undeclared_variable (x:Ptree.ident) =
   let error = "undeclared variable " ^ x.id in
   raise_error x.id_loc error;;
@@ -166,17 +171,18 @@ let rec convert_decl_var_list (decl_list:Ptree.decl_var list) =
     match decl_list with
     | hd::tl -> (begin 
         let hd_typ, hd_ident = hd in
+        (* Check if the variable has already been declared inside the same block *)
         if(Hashtbl.mem local_declarations hd_ident.id) then 
-          raise (Error ("Variable " ^ hd_ident.id ^ " already declared."))
+          raise_previously_declared_variable hd_ident
         else(
+          (* Add the variable to the declaration inside the block *)
           let converted_type = convert_type hd_typ in
           Hashtbl.add local_declarations hd_ident.id converted_type;
           let rest = aux args tl in
           (converted_type, hd_ident.id)::rest
         )
       end)
-    | [] -> []
-      (*Stack.push local_declarations variable_declarations*);
+    | [] -> [];
   in 
   aux args decl_list;
 ;;
@@ -190,84 +196,10 @@ let rec get_var_name = function
 let rec convert_expr_node = function
   | Ptree.Econst cst -> if(cst = zero) then Ttypenull, Ttree.Econst cst else Tint, Ttree.Econst cst;
   (* Treat the case of calling a variable as a right member*)
-  | Ptree.Eright rval -> (match rval with
-    | Ptree.Lident lid-> begin 
-        let saved_typ , saved_ident = find_variable lid in
-        saved_typ, Ttree.Eaccess_local lid.id;
-      end
-    | Ptree.Larrow (lar,field) -> begin
-        let lar_typ, lar_node = convert_expr_node lar.expr_node in
-        (* Take care of the case 0->field / typenull->field *)
-        if(lar_typ = Ttree.Ttypenull) then 
-        lar_typ, Ttree.Eaccess_field({expr_node=lar_node; expr_typ=lar_typ}, {field_name = field.id; field_typ = lar_typ; field_pos = 0})
-      else
-        let variable_name = get_var_name lar.expr_node in
-        (*raise (Error ("var name " ^ variable_name ^ " field " ^ field.id ^ " : type of node lar is " ^ (string_of_expr_node lar_node)));*)
-        
-        let var_typ, var_name = (match lar_node with
-          | Eaccess_field (e,f) -> lar_typ, variable_name
-          | Eaccess_local id -> begin 
-              find_variable {id=variable_name; id_loc=lar.expr_loc}
-            end
-          | _ -> raise (Error "Some other type of access that is not yet implemented. Should not exist.")
-        ) in
-        
-        let str_typ = string_of_type var_typ in
-
-        let str_fields = try 
-          (Hashtbl.find structures str_typ).str_fields
-        with Not_found -> raise_undeclared_structure {id=str_typ; id_loc=lar.expr_loc} in
-        
-        let called_field = try
-          Hashtbl.find str_fields field.id 
-        with Not_found -> raise_undeclared_field field in
-
-        called_field.field_typ, Ttree.Eaccess_field({expr_node=lar_node; expr_typ=lar_typ}, called_field)
-      end)
-
+  | Ptree.Eright rval -> treat_access_assign rval Ptree.Enone
   (* Treat the case of assigning to the variable *)
-  | Ptree.Eassign (lval,e) -> (match lval with
-    | Ptree.Lident lid-> begin 
-      let saved_typ , saved_ident = find_variable lid in
-
-      let e_typ, e_node = convert_expr_node e.expr_node in
-      if(compare_typ saved_typ e_typ) then( (*Make sure the types are consistant*)
-        (*print_string ("Typing : " ^ lid.id ^ " was : " ^ (string_of_type saved_typ) ^ " \n");*)
-        if(e_typ = Ttypenull) then
-          begin
-            replace_var_type lid e_typ;
-            (*print_string ("Typing : " ^ lid.id ^ " is : " ^ (string_of_type e_typ) ^ " \n");*)
-          end;
-        saved_typ, Ttree.Eassign_local (lid.id,{expr_node = e_node; expr_typ = e_typ})
-      )
-      else raise_unconsistant lid.id_loc saved_typ e_typ;
-    end
-    | Ptree.Larrow (lar,field) -> begin
-      let lar_typ, lar_node = convert_expr_node lar.expr_node in
-      let variable_name = get_var_name lar.expr_node in
-
-      let var_typ, var_name = (match lar_node with
-          | Eaccess_field (e,f) -> lar_typ, variable_name
-          | Eaccess_local id -> find_variable {id=variable_name; id_loc=lar.expr_loc}
-          | _ -> raise (Error "Some other type of access that is not yet implemented. Should not exist.")
-        ) in
-      
-      let str_typ = string_of_type var_typ in
-
-      let str_fields = try 
-        (Hashtbl.find structures str_typ).str_fields
-      with Not_found -> raise_undeclared_structure {id=str_typ; id_loc=lar.expr_loc} in
-      
-      let called_field = try
-        Hashtbl.find str_fields field.id 
-      with Not_found -> raise_undeclared_field field in
-
-      let e_typ, e_node = convert_expr_node e.expr_node in
-      if(compare_typ called_field.field_typ e_typ) then (*Make sure the types are consistant*)
-        called_field.field_typ, Ttree.Eassign_field({expr_node=lar_node; expr_typ=lar_typ}, called_field, {expr_node = e_node; expr_typ = e_typ})
-      else raise_unconsistant lar.expr_loc lar_typ e_typ;
-    end)
-
+  | Ptree.Eassign (lval,e) -> treat_access_assign lval e.expr_node
+  (* Treat the case of !x or -x *)
   | Ptree.Eunop (nop, e) -> (match nop with
     (* nop is ! , then if e is well typed, !e is of type int*)
     | Unot -> begin
@@ -282,21 +214,75 @@ let rec convert_expr_node = function
         else raise_other  e.expr_loc "Can't apply - operator to type " e_typ
       end
   )
-  
   (* Treat operations between two expressions *)
   | Ptree.Ebinop (binop, e1, e2) -> treat_binop binop e1 e2;
-
   (* Treat function calls *)
   | Ptree.Ecall (f, e_list) -> treat_call f e_list;
   
-  | Ptree.Esizeof str -> (begin
+  | Ptree.Esizeof str -> begin
       let structure_identifier = "struct " ^ str.id ^ " *" in
       let called_structure = try
         Hashtbl.find structures structure_identifier
       with Not_found -> raise_undeclared_structure str in
       Tint, Ttree.Esizeof called_structure;
-    end)
-  
+    end
+  | Ptree.Enone -> raise (Error "Ptree.Enone should not be treated")
+
+and treat_access_assign lval e = match lval with
+  | Ptree.Lident lid->  
+    let saved_typ , saved_ident = find_variable lid in
+
+    (* Eassign *)
+    if(e != Ptree.Enone) then begin
+      let e_typ, e_node = convert_expr_node e in
+      if(compare_typ saved_typ e_typ) then( (*Make sure the types are consistant*)
+        if(e_typ = Ttypenull) then
+          begin replace_var_type lid e_typ; end;
+        saved_typ, Ttree.Eassign_local (lid.id,{expr_node = e_node; expr_typ = e_typ})
+      )
+      else raise_unconsistant lid.id_loc saved_typ e_typ;
+    end
+    (* Eaccess *)
+    else 
+      saved_typ, Ttree.Eaccess_local lid.id;
+
+  | Ptree.Larrow (lar,field) ->
+    let lar_typ, lar_node = convert_expr_node lar.expr_node in
+    if(lar_typ = Ttree.Ttypenull) then 
+      lar_typ, Ttree.Eaccess_field({expr_node=lar_node; expr_typ=Ttree.Ttypenull}, {field_name = field.id; field_typ = Ttree.Ttypenull; field_pos = 0})
+    else
+    let variable_name = get_var_name lar.expr_node in
+
+    let var_typ, var_name = (match lar_node with
+        | Eaccess_field (e,f) -> lar_typ, variable_name
+        | Eaccess_local id -> find_variable {id=variable_name; id_loc=lar.expr_loc}
+        | _ -> raise (Error "Some other type of access that is not yet implemented. Should not exist.")
+      ) in
+
+    let str_typ = string_of_type var_typ in
+    (* If var_typ is a structure, var_typ = S and str_typ = struct S* *)
+
+    let str_fields = try 
+      (Hashtbl.find structures str_typ).str_fields
+    with Not_found -> raise_undeclared_structure {id=str_typ; id_loc=lar.expr_loc} in
+    
+    let called_field = try
+      Hashtbl.find str_fields field.id 
+    with Not_found -> raise_undeclared_field field in
+
+    (* Eassign *)
+    if(e != Ptree.Enone)  then begin
+      let e_typ, e_node = convert_expr_node e in
+      if(compare_typ called_field.field_typ e_typ) then (*Make sure the types are consistant*)
+        called_field.field_typ, Ttree.Eassign_field({expr_node=lar_node; expr_typ=lar_typ}, called_field, {expr_node = e_node; expr_typ = e_typ})
+      else raise_unconsistant lar.expr_loc lar_typ e_typ
+    end
+    (* Eaccess *)
+    else
+      called_field.field_typ, Ttree.Eaccess_field({expr_node=lar_node; expr_typ=lar_typ}, called_field)
+      
+
+
 and treat_binop binop e1 e2 = match binop with
   (* convert expressions and see if they are compatible*)
   | Beq | Bneq | Blt | Ble | Bgt | Bge -> begin
@@ -390,17 +376,10 @@ and convert_stmt_node return_typ = function
   end
 
   | Ptree.Sdecl (dlist) -> 
-    (*print_string "before Sdecl ";
-    print_int (Stack.length variable_declarations);
-    print_string "\n";*)
-    let vars = convert_decl_var_list dlist in
-    (*print_string "Sdecl ";
-    List.iter (fun (t,id) -> print_string (id ^" ")) vars;
-    print_string "\n";*)
-    (*print_string "after Sdecl ";
-    print_int (Stack.length variable_declarations);
-    print_string "\n";*)
+    (*Declare variables inside the same block*)
+    let _ = convert_decl_var_list dlist in
     Ttree.Sskip;
+
   | Ptree.Sinit (x,e) -> 
     (*Convert right expression *)
     let expression_type, converted_expression = convert_expr_node e.expr_node in
@@ -413,31 +392,29 @@ and convert_stmt_node return_typ = function
 
 
 and convert_block return_typ stmt_list =
-  (*print_string "new block\n";*)
   (* Push blocks own hashtable *)
   let block_variables = Hashtbl.create 16 in
   Stack.push block_variables variable_declarations;
   let converted_stmt = convert_stmt_list return_typ stmt_list in
-  (*Hashtbl.iter (fun key (t,n) -> print_string ("variable " ^ key ^" of type " ^ (string_of_type t) ^ "\n")) variable_list;*)
+
+  (* Take down the block hashtable from the declaration list *)
   let _ = (try 
     Stack.pop variable_declarations
   with Stack.Empty -> raise (Error "Trying to pop from empty stack in treating block statement")) in
-  (*print_string "block popped\n";*)
+  
+  (* Get the variable declared inside this block *)
   let variables = Hashtbl.to_seq block_variables in
   let seq_variables = Seq.map (fun (x, t) -> (t,x)) variables in
   let list_variables = List.rev(List.of_seq( seq_variables ))in
-  (*print_string "block containing ";
-  List.iter (fun (t,id) -> print_string (id ^" ")) list_variables;
-  print_string "\n";*)
+
   (list_variables,converted_stmt);;
 
 
 
 let treat_body fun_body converted_typ name args =
-  (*print_string "treating body ";
-  print_int (Stack.length variable_declarations);
-  print_string "\n";*)
   let converted_block = convert_block converted_typ fun_body in
+
+  (* Pop the formals out of the declarations *)
   let _ = (try 
     Stack.pop variable_declarations
   with Stack.Empty -> raise (Error "Trying pop function formals")) in

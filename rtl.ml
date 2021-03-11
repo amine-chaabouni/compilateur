@@ -277,12 +277,8 @@ and condition_boolean_op binop (e1: Ttree.expr) (e2: Ttree.expr) truel falsel =
   | Ptree.Ble -> Ops.Mjle
   | Ptree.Bgt -> r1 := reg_e2; r2 := reg_e1; Ops.Mjl
   | Ptree.Bge -> r1 := reg_e2; r2 := reg_e1; Ops.Mjle
-  | _ -> raise_error "ha" in
-  (*let instruction_branch = Embbranch(op, !r2, !r1, truel, falsel) in
-  let label_branch = generate instruction_branch in
-  let label_put_e2 = expr e2.expr_node reg_e2 label_branch (*""*) in
-  let label_put_e1 = expr e1.expr_node reg_e1 label_put_e2 (*""*) in
-  label_put_e1*)
+  | _ -> raise_error "Binop should not be treated here" in
+
   match e1.expr_node, e2.expr_node, binop with
   | (Ttree.Econst c1, Ttree.Econst c2, _) -> begin
     let id, im_op = match binop with
@@ -290,7 +286,7 @@ and condition_boolean_op binop (e1: Ttree.expr) (e2: Ttree.expr) truel falsel =
       | Ptree.Ble -> 1, Ops.Mjlei c2;
       | Ptree.Blt -> 2, Ops.Mjgi c1;
       | Ptree.Bge -> 2, Ops.Mjlei c1;
-      | _ -> raise_error "ha"
+      | _ -> raise_error "Binop should not be treated here"
     in
     if(id = 1) then begin
       let instruction_branch = Emubranch(im_op, reg_e1, truel, falsel) in
@@ -340,7 +336,7 @@ and condition e truel falsel = match e with
       let label_convert_e2 = condition e2.expr_node truel falsel in
       let label_convert_e1 = condition e1.expr_node  truel label_convert_e2 in
       label_convert_e1
-    | _ -> begin (*add, sub, mul div*)
+    | _ -> begin (*add, sub, mul, div*)
       let register = Register.fresh() in
       let instruction_branch = Rtltree.Emubranch(Ops.Mjz, register, falsel, truel) in
       let label_branch = generate instruction_branch in
@@ -359,14 +355,14 @@ let rec stmt s destl retr exitl local_reg = match s with
       let block_var_to_reg = Hashtbl.create 16 in
       Stack.push block_var_to_reg var_to_reg;
       let decl_list, stmt_list = b in
-      (*print_string "Block \n";
-      List.iter (fun (t,x) -> print_string (x ^ "\n")) decl_list ;*)
-      (* Add the local vars declared here to the scope *)
+      (* Declare the variables and associate a register to each one *)
       List.iter (function t, s -> let register = Register.fresh()
         in local_reg := Register.S.add register !local_reg;
         Hashtbl.add block_var_to_reg s register)
         decl_list;
+      (* Treat every statement *)
       let result = List.fold_right (fun s label -> stmt s label retr exitl (ref Register.S.empty)) stmt_list destl in
+      (* Pop the block's declaration variables out of the global table *)
       let _ = (try 
         Stack.pop var_to_reg
       with Stack.Empty -> raise_error "Trying to pop from empty stack in treating block statement") in
@@ -403,10 +399,8 @@ let deffun (fun_definition:Ttree.decl_fun) =
   and exitl = Label.fresh()
   and local_reg = ref Register.S.empty in
   let local_var_to_reg = Hashtbl.create 16 in
-  let fun_formals = List.map  (function x -> let register = Register.fresh()
-    in Hashtbl.add local_var_to_reg x register;
-    register) (* TODO : Formals are a step higher than the declarations of the body?
-                        Should maybe see this *)
+  let fun_formals = List.map
+    (function x -> let register = Register.fresh() in Hashtbl.add local_var_to_reg x register; register)
     id_params
   in
   Stack.push local_var_to_reg var_to_reg;
