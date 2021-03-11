@@ -48,9 +48,12 @@ let find_colorable_register (ig:Interference.igraph) todo colorization =
       Register.S.iter check_if_allocatable prefs;
 
       let check_if_colorized r =
-        if(not (Register.S.mem r todo)) then
+        (* Check if register is not allocatable -already did that case- and that it has already been treated *)
+        if(not (Register.S.mem r Register.allocatable) && not (Register.S.mem r todo)) then 
           begin
-            let color_set = Register.M.find r colorization in
+            let color_set = try 
+              Register.M.find r colorization
+            with Not_found -> raise_error ((r:>string) ^ " not found") in
             if(Register.S.cardinal color_set = 1) then
               let color =  Register.S.min_elt color_set in
               if(Register.S.mem color possible_colors) then (*Make sure it is okay to choose this color*)
