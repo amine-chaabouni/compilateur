@@ -2,7 +2,7 @@ type arcs = { mutable prefs: Register.set; mutable intfs: Register.set }
 
 type igraph = arcs Register.map
 
-let make (info_map:Ertltree.live_info Label.M.t) = 
+let make (info_map:Liveness.live_info Label.M.t) = 
   let ltl_graph = ref Register.M.empty in
   (* First loop to add preference arcs *)
   let find_arc register = 
@@ -21,7 +21,7 @@ let make (info_map:Ertltree.live_info Label.M.t) =
     end
     | _ -> ()
   in
-  Label.M.iter (fun label (info:Ertltree.live_info) -> find_mov_instr info.instr) info_map;
+  Label.M.iter (fun label (info:Liveness.live_info) -> find_mov_instr info.instr) info_map;
   
   (* Second loop to add interference arcs *)
   let add_intfs register interfering = 
@@ -33,7 +33,7 @@ let make (info_map:Ertltree.live_info Label.M.t) =
     in 
     Register.S.iter add_interference interfering
   in
-  let fill_intfs (info:Ertltree.live_info) = 
+  let fill_intfs (info:Liveness.live_info) = 
     match info.instr with
     | Ertltree.Embinop (Ops.Mmov, rs, rd, _) -> begin
       let to_remove = Register.S.of_list [rs ; rd] in
@@ -57,4 +57,8 @@ let print_ig ig =
   Register.M.iter (fun r arcs ->
     Format.printf "%s: prefs=@[%a@] intfs=@[%a@]@." (r :> string)
       Register.print_set arcs.prefs Register.print_set arcs.intfs) ig
+
+
+let program (p:Ertltree.file) = 
+  List.iter (fun (f:Ertltree.deffun) -> print_ig (make (Liveness.liveness f.fun_body))) p.funs;
   

@@ -14,6 +14,8 @@ let interp_ltl = ref false
 let interp_asm = ref false
 let debug = ref false
 let life_cycle = ref false
+let interferences = ref false
+let colorize = ref false
 
 let ifile = ref ""
 
@@ -35,7 +37,11 @@ let options =
    "--debug", Arg.Set debug,
      "  debug mode";
    "--life-cycle", Arg.Set life_cycle,
-     "  show life cycle"
+     "  show life cycle";
+   "--interferences", Arg.Set interferences,
+     "  show interferences";
+   "--colorize", Arg.Set colorize,
+     "  show colorization"
    ]
 
 let usage = "usage: mini-c [options] file.c"
@@ -66,21 +72,18 @@ let () =
     if debug then Rtltree.print_file std_formatter p;
     if !interp_rtl then begin ignore (Rtlinterp.program p); exit 0 end;
     let p = Ertl.program p in
-    if debug then Ertltree.print_file std_formatter p !life_cycle;
+    if debug then Ertltree.print_file std_formatter p;
     if !interp_ertl then begin ignore (Ertlinterp.program p); exit 0 end;
+    if !life_cycle then begin ignore (Liveness.program p); exit 0 end;
+    if !interferences then begin ignore (Interference.program p); exit 0 end;
+    if !colorize then begin ignore (Colorize.program p); exit 0 end;
     let p = Ltl.program p in
     if debug then Ltltree.print_file std_formatter p;
     if !interp_ltl then begin ignore (Ltlinterp.program p); exit 0 end;
     let p = Linearize.program p in
     if debug then X86_64.print_program std_formatter p;
     let file_s = (Filename.chop_suffix !ifile ".c")^".s" in
-    (*print_string "file name : ";
-    print_string !ifile;
-    print_string "\n";
-    print_string file_s;
-    print_string "\n";*)
-    X86_64.print_in_file ~file:file_s p; exit 0 
-    (* ... *)
+    X86_64.print_in_file ~file:file_s p; exit 0
   with
     | Lexer.Lexical_error c ->
 	localisation (Lexing.lexeme_start_p buf);
@@ -91,7 +94,7 @@ let () =
 	eprintf "syntax error@.";
 	exit 1
     | Typing.Error s->
-	eprintf "typing error: %s@." s;
+	eprintf "File \"%s\", %s@." !ifile s;
 	exit 1
     | e ->
         let bt = Printexc.get_backtrace () in

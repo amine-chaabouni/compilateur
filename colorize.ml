@@ -123,8 +123,12 @@ let colorize (ig:Interference.igraph) =
 open Format
 (* Function to print color *)
 let print_color fmt = function
-| Ltltree.Reg hr    -> fprintf fmt "%a" Register.print hr
-| Ltltree.Spilled n -> fprintf fmt "stack %d" n
+  | Ltltree.Reg hr    -> fprintf fmt "%a" Register.print hr
+  | Ltltree.Spilled n -> fprintf fmt "stack %d" n
 let print_cm cm =
-Register.M.iter
-  (fun r cr -> printf "%a -> %a@\n" Register.print r print_color cr) cm
+  Register.M.iter
+    (fun r cr -> printf "%a -> %a@\n" Register.print r print_color cr) cm
+
+let program (p:Ertltree.file) =
+  List.iter (fun (f:Ertltree.deffun) -> let cm,_ = colorize (Interference.make (Liveness.liveness f.fun_body)) in print_cm cm) p.funs;
+

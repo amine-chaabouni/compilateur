@@ -42,17 +42,6 @@ type deffun = {
   fun_entry : label;
   fun_body : cfg;
 }
-
-type live_info = {
-  instr: instr;
-  succ: Label.t list;             (* successeurs *)
-  mutable pred: Label.set;        (* prédécesseurs *)
-  defs: Register.set;             (* définitions *)
-  uses: Register.set;             (* utilisations *)
-  mutable  ins: Register.set;     (* variables vivantes en entrée *)
-  mutable outs: Register.set;     (* variables vivantes en sortie *)
-}
-
 (** Un programme ERTL. *)
 type file = {
   funs : deffun list;
@@ -66,18 +55,15 @@ val succ: instr -> label list
 val def_use: instr -> register list * register list
   (** calcul des définitions et utilisations de chaque instruction *)
 
-val visit: bool -> (label -> instr -> live_info -> bool -> unit) -> cfg -> label -> unit
+val visit: (label -> instr -> bool -> unit) -> cfg -> label -> unit
   (** visite le graphe de flot de contrôle à partir d'une étiquette donnée *)
-
-(** Liveness **)
-val liveness: instr Label.M.t -> live_info Label.M.t
 
 (** {2 Fonctions d'impression, pour debugger} *)
 
 val print_instr: Format.formatter -> instr -> unit
 
-val print_graph: Format.formatter -> bool -> cfg -> label -> unit
+val print_graph: Format.formatter -> cfg -> label -> unit
 
-val print_deffun: Format.formatter -> bool -> deffun -> unit
+val print_deffun: Format.formatter -> deffun -> unit
 
-val print_file: Format.formatter -> file -> bool -> unit
+val print_file: Format.formatter -> file -> unit
