@@ -118,7 +118,7 @@ let convert_instr colorization m label instr =
   in associate label converted_instruction;;
 
 let convert_graph ertl_graph =
-  let map_info = Ertltree.liveness ertl_graph in
+  let map_info = Liveness.liveness ertl_graph in
   let igraph = Interference.make map_info in
   let colorization, m = Colorize.colorize igraph in
   Label.M.iter (convert_instr colorization m) ertl_graph;;
