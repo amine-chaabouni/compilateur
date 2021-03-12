@@ -1,5 +1,5 @@
 
-// contribution de Timothée Chauvin (X2017)
+// Inspiré de la contribution de Timothée Chauvin (X2017)
 
 struct S {
     int i16;
