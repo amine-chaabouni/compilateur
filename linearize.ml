@@ -25,7 +25,6 @@ let operand = function
   | Ltltree.Spilled n -> X86_64.ind ~ofs:n X86_64.rbp;;
 
 let find_label l= 
-  (*Label.print std_formatter l;*)
   let fun_name = try
     Hashtbl.find function_label l
   with Not_found -> (l:>string) in
@@ -37,9 +36,6 @@ let rec lin g l =
     Hashtbl.add visited l ();
     produce_code g l (Label.M.find l g)
   end else begin
-    (*print_string "already visited label ";
-    Label.print std_formatter l;
-    print_string "\n";*)
     need_label l;
     emit_wl (X86_64.jmp (l :> string))
   end
@@ -152,25 +148,19 @@ let rec lin g l =
     let asm_inst = instruction mubranch and asm_opp = instruction (opposite mubranch) in
 
     if(not(Hashtbl.mem visited label3)) then begin
-      (*print_string "didn't see the negatif, the positif is :";
-      Label.print std_formatter label2;
-      print_string "\n";*)
+      (* Didn't treat the negative case *)
       emit_wl (asm_inst (label2:> string));
       need_label label2;
       lin g label3;
       lin g label2;
     end else if(not(Hashtbl.mem visited label2)) then begin
-      (*print_string "saw the negatif but didn't see the positif\n";*)
+      (* Treated the negative case but not the positive one *)
       emit_wl (asm_opp (label3:> string));
       need_label label3;
       lin g label2;
-      lin g label3;
+      lin g label3; (* this will produce the jmp label3 instruction *)
     end else begin
-      (*print_string "saw the negatif : ";
-      Label.print std_formatter label3;
-      print_string " and the positif :";
-      Label.print std_formatter label2;
-      print_string "\n";*)
+      (* Treated both cases *)
       emit_wl (asm_inst (label2:> string));
       need_label label2;
       lin g label3; (* this will produce the jmp label3 instruction *)
@@ -188,21 +178,19 @@ let rec lin g l =
     in
     let asm_inst = instruction mbbranch and asm_opp = opposite_instruction mbbranch in
     if(not(Hashtbl.mem visited label3)) then begin
-      (*print_string "didn't see the negatif ";
-      Label.print std_formatter label3;
-      print_string "\n";*)
+      (* Didn't treat the negative case *)
       emit_wl (asm_inst (label2 :> string));
       need_label label2;
       lin g label3;
       lin g label2;
     end else if(not(Hashtbl.mem visited label2)) then begin
-      (*print_string "saw the negatif but didn't see the positif\n";*)
+      (* Treated the negative case but not the positive one *)
       emit_wl (asm_opp (label3:> string));
       need_label label3;
       lin g label2;
-      lin g label3;
+      lin g label3; (* this will produce the jmp label3 instruction *)
     end else begin
-      (*print_string "saw the negatif and the positif\n";*)
+      (* Treated both cases *)
       emit_wl (asm_inst (label2:> string));
       need_label label2;
       lin g label3; (* this will produce the jmp label3 instruction *)
@@ -216,10 +204,8 @@ let generate_code final_code (fun_def:Ltltree.deffun)  =
   map_label_to_function first_label function_id;
   need_label first_label;
   lin fun_def.fun_body first_label;
-  (*Hashtbl.iter (fun l _ -> Label.print std_formatter l; print_string " ") labels;
-  print_string "\n";*)
   let clean = function
-    | Label l -> (*Label.print std_formatter l;*) Hashtbl.mem labels l
+    | Label l -> Hashtbl.mem labels l
     | Code i -> true
   in
   code := List.filter clean !code;

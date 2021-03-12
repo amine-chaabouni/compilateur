@@ -7,9 +7,6 @@ let word_size = 8
 exception Error of string
 
 
-let raise_error  error =
-  raise (Error error);;
-
 let ertl_graph = ref Label.M.empty
 
 let generate i =

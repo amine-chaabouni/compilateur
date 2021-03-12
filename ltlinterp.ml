@@ -126,7 +126,8 @@ let rec exec st gr l =
     exec st gr l
   | Ecall ("putchar", l) ->
     let n = getr st Register.rdi in
-    (*print_int (Int64.to_int n);
+    (*print_string "n = ";
+    print_int (Int64.to_int n);
     print_string "\n";*)
     Format.printf "%c" (Char.chr (Int64.to_int n));
     setr st Register.rax n;

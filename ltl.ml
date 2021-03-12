@@ -1,5 +1,4 @@
 open Ltltree
-let word_size = 8
 exception Error of string
 let ltl_graph = ref Label.M.empty;;
 

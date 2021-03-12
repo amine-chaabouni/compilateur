@@ -52,7 +52,7 @@ let make (info_map:Ertltree.live_info Label.M.t) =
   !ltl_graph;;
   
 
-  (* Function to print igraph *)
+(* Function to print igraph *)
 let print_ig ig =
   Register.M.iter (fun r arcs ->
     Format.printf "%s: prefs=@[%a@] intfs=@[%a@]@." (r :> string)
