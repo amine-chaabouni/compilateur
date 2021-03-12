@@ -12,13 +12,13 @@ type typ =
 and structure = {
   str_name  : ident;
   str_fields: (ident, field) Hashtbl.t;
-  str_size : int; (* on pourra ajouter plus tard ici la taille totale de la structure *)
+  str_size : int; (* un multiple de word_size *)
 }
 
 and field = {
   field_name: string;
   field_typ : typ;
-  field_pos : int; (* on pourra ajouter plus tard ici la position du champ dans la structure *)
+  field_pos : int; (* Un multiple de word_size *)
 }
 
 type unop = Ptree.unop

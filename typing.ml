@@ -7,6 +7,8 @@ open Int32
 (* utiliser cette exception pour signaler une erreur de typage *)
 exception Error of string
 
+let word_size = 8;;
+
 
 let structures = (Hashtbl.create 16 : (string, structure) Hashtbl.t);;
 let functions = (Hashtbl.create 16 : (string, (Ttree.typ * (Ttree.typ*string) list)) Hashtbl.t);;
@@ -58,8 +60,9 @@ let type_of_string x = match x with
 let raise_error (loc:Ptree.loc) error =
   let line,column = loc in
   raise (
-    Error (" at line: " ^ string_of_int(line.pos_lnum)
-    ^ "      " ^ error)
+    Error ("line: " ^ string_of_int(line.pos_lnum)
+    ^ ", column: " ^ string_of_int(line.pos_cnum - line.pos_bol)
+    ^ "\n" ^ error)
   );;
 
 
@@ -143,7 +146,7 @@ let struct_aux ((identifier, list_of_members):Ptree.decl_struct) =
   if(Hashtbl.mem structures str_identifier) then
     raise (Error (str_identifier ^ " previously declared. Can't declare it twice."))
   else
-    let new_struc = {str_name = identifier.id; str_fields = Hashtbl.create(List.length list_of_members); str_size = List.length list_of_members} in 
+    let new_struc = {str_name = identifier.id; str_fields = Hashtbl.create(List.length list_of_members); str_size = word_size * List.length list_of_members} in 
     Hashtbl.add structures str_identifier new_struc;
     let rec fill (declaration_var:Ptree.decl_var list) position = match declaration_var with
     | hd::tl -> 
@@ -152,7 +155,7 @@ let struct_aux ((identifier, list_of_members):Ptree.decl_struct) =
         raise (Error (str_identifier ^ "already possesses " ^ hd_ident.id ^ ". Can't declare field twice in a single structre."))
       else
       (
-        let new_field = {field_name = hd_ident.id; field_typ = convert_type hd_typ; field_pos = position} in
+        let new_field = {field_name = hd_ident.id; field_typ = convert_type hd_typ; field_pos = word_size * position} in
         Hashtbl.add new_struc.str_fields hd_ident.id new_field; fill tl (position+1);)
     | [] -> (); in
     fill list_of_members 0;
@@ -381,11 +384,11 @@ and convert_stmt_node return_typ = function
     Ttree.Sskip;
 
   | Ptree.Sinit (x,e) -> 
+    (*Declare variables inside the same block*)
+    let _ = convert_decl_var_list x in
     (*Convert right expression *)
     let expression_type, converted_expression = convert_expr_node e.expr_node in
     let expression = {expr_node = converted_expression; expr_typ = expression_type} in
-    (*Declare variables inside the same block*)
-    let _ = convert_decl_var_list x in
     (*Return the expression*)
     let decl_list = List.map (fun (t,(id:Ptree.ident)) -> (convert_type t, id.id)) x in
     Ttree.Sexpr {expr_node = Ttree.Einit_local (decl_list,expression); expr_typ = expression_type}
