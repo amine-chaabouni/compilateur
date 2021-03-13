@@ -73,10 +73,11 @@ let () =
     if !interp_rtl then begin ignore (Rtlinterp.program p); exit 0 end;
     let p = Ertl.program p in
     if debug then Ertltree.print_file std_formatter p;
-    if !interp_ertl then begin ignore (Ertlinterp.program p); exit 0 end;
-    if !life_cycle then begin ignore (Liveness.program p); exit 0 end;
-    if !interferences then begin ignore (Interference.program p); exit 0 end;
-    if !colorize then begin ignore (Colorize.program p); exit 0 end;
+    if !interp_ertl then begin ignore (Ertlinterp.program p); end;
+    if !life_cycle then begin ignore (Liveness.program p); end;
+    if !interferences then begin ignore (Interference.program p); end;
+    if !colorize then begin ignore (Colorize.program p); end;
+    if(!interp_ertl || !life_cycle || !interferences || !colorize) then exit 0;
     let p = Ltl.program p in
     if debug then Ltltree.print_file std_formatter p;
     if !interp_ltl then begin ignore (Ltlinterp.program p); exit 0 end;
