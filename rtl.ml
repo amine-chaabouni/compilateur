@@ -81,10 +81,11 @@ let rec expr e destr destl  = match e with
   | Ttree.Eassign_local (id, e) -> begin
     (* Find the register associated to the variable *)
     let register = associate_register id in
-    
-    let instruction_assign = Rtltree.Embinop(Ops.Mmov, destr, register, destl) in
+    let tmp = Register.fresh() in 
+    let label_mov_destr = generate (Rtltree.Embinop(Ops.Mmov, register, destr, destl)) in
+    let instruction_assign = Rtltree.Embinop(Ops.Mmov, tmp, register, label_mov_destr) in
     let label_assign = generate instruction_assign in
-    let label_expression = expr e.expr_node destr label_assign in
+    let label_expression = expr e.expr_node tmp label_assign in
 
     label_expression;
   end;
