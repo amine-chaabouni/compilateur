@@ -44,12 +44,18 @@ and treat_div r1 r2 l =
   instruction_mov_r2_rax
 
 and treat_call r id fun_name r_list l exit_label entry_label formal_regs=
-
+  let new_regs = Hashtbl.create 16 in
   let nb_args = List.length r_list in
   let index_param = ref (-1) in
   let k = min nb_args 6 in
 
   if (l<>exit_label || id <> fun_name) then
+    (* Associate pseudo-registers for caller-saved registers *)
+    let associate_pseudo register = 
+      let pseudo_register = Register.fresh() in
+      Hashtbl.add new_regs pseudo_register register;
+    in List.iter associate_pseudo Register.caller_saved;
+
     (* Unfold the arguments on the stack *)
     let unfold_params label register =
       index_param := !index_param+1;
@@ -62,12 +68,23 @@ and treat_call r id fun_name r_list l exit_label entry_label formal_regs=
 
     let label_unfold = List.fold_left unfold_params l r_list in
     assert(!index_param = nb_args-1);
+
+    (* Restore caller-saved registers *)
+    (*let label_restore_caller_saved = Hashtbl.fold 
+      (fun pseudo register label -> generate(Embinop(Ops.Mmov, pseudo, register, label)))
+      new_regs label_unfold in*)
     
     (* Copy the result in rax *)
     let label_result = generate (Embinop(Ops.Mmov, Register.result, r, label_unfold)) in
 
     (* Function call *)
     let instruction_call = Ecall(id, k, label_result) in
+
+    (* Save caller-saved registers *)
+    (*let save_register pseudo_register register instr =
+      let label = generate(instr) in
+      Embinop(Ops.Mmov, register, pseudo_register, label) in
+    let instruction_save_caller_saved = Hashtbl.fold save_register new_regs instruction_call in*)
 
     (* Put the formals inside Register.parameters or on the stack if too many *)
     (* Can do the same with labels and return a Goto instruction *)
