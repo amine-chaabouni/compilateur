@@ -162,7 +162,7 @@ let visit f g entry =
   in
   visit entry;;
 
-let printed fmt l i info = 
+let printed fmt l i = 
   fprintf fmt "%a: %a@\n" Label.print l print_instr i
 
 

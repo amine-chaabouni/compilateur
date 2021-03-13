@@ -214,7 +214,7 @@ let generate_code final_code (fun_def:Ltltree.deffun)  =
     | Label l -> X86_64.(++) x (find_label l)
     | Code i -> X86_64.(++) x i;
   in
-  let asm_code = List.fold_left concatenate (X86_64.globl function_id) (List.rev !code)  in
+  let asm_code = List.fold_left concatenate (X86_64.nop) (List.rev !code)  in
   final_code := asm_code::!final_code;;
 
 
@@ -222,5 +222,6 @@ let program (p:Ltltree.file) =
   let final_code = ref [] in
   List.iter (generate_code final_code) p.funs;
   let asm_code = List.fold_right (fun x y -> X86_64.(++) x y) (List.rev !final_code) (X86_64.nop) in
+  let asm_code = X86_64.(++) (X86_64.globl "main") asm_code in
   let asm_program:X86_64.program = {text = asm_code; data = X86_64.nop} in
   asm_program
