@@ -61,7 +61,7 @@ let raise_error (loc:Ptree.loc) error =
   let line,column = loc in
   raise (
     Error ("line: " ^ string_of_int(line.pos_lnum)
-    ^ ", column: " ^ string_of_int(line.pos_cnum - line.pos_bol)
+    ^ ", characters: " ^ string_of_int(line.pos_cnum - line.pos_bol-1) ^ "-" ^ string_of_int(line.pos_cnum - line.pos_bol)
     ^ "\n" ^ error)
   );;
 
