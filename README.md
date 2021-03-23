@@ -4,7 +4,7 @@ The directory has the following structure:
 ├── Compiler.pdf\
 ├── README.md\
 ├── mini-c ── ..\
-└── tests ── ..\
+└── tests ── ..
 
 Compiler.pdf is the report we wrote.
 mini-c is the directory containing the source code.
