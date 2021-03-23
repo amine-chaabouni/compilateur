@@ -2,10 +2,10 @@ This project consist on implementing a compiler for a fragment of C (called Mini
 
 The directory has the following structure:
 
-.
-├── Compiler.pdf
-├── README.md
-├── mini-c ── ..
+.\
+├── Compiler.pdf\
+├── README.md\
+├── mini-c ── ..\
 └── tests ── ..
 
 Compiler.pdf is the report we wrote.
