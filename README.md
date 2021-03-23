@@ -1,6 +1,6 @@
 The directory has the following structure:
 
-.
+.\
 ├── Compiler.pdf\
 ├── README.md\
 ├── mini-c ── ..\
